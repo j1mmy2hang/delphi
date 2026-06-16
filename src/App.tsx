@@ -1,31 +1,24 @@
 import { useRef, useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
-import { Hero } from './components/Hero'
-import { InputBar } from './components/InputBar'
-import { MessageList } from './components/MessageList'
-import { useChatStream } from './hooks/useChatStream'
-import { useChatScroll } from './hooks/useChatScroll'
+import { WaveField } from './components/WaveField'
+import { MessageStage } from './components/MessageStage'
+import { InputDock } from './components/InputDock'
+import { useConversationStage } from './hooks/useConversationStage'
 import { useViewportKeyboard } from './hooks/useViewportKeyboard'
 
 function App() {
   const [input, setInput] = useState('')
-  const { messages, isStreaming, send, reset } = useChatStream()
-  const chatStarted = messages.length > 0
-  const inputBarRef = useRef<HTMLDivElement>(null)
+  const { phase, role, text, intensity, busy, submit, reset } = useConversationStage()
+  const started = !(role === 'idle' && phase === 'idle')
+
+  const dockRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  const { containerRef, spacerRef, registerMessage, scrollNewUserMessageToTop } =
-    useChatScroll(messages, isStreaming)
-
-  useViewportKeyboard(chatStarted, textareaRef, inputBarRef)
+  useViewportKeyboard(started, textareaRef, dockRef)
 
   const handleSend = () => {
     const trimmed = input.trim()
-    if (!trimmed || isStreaming) return
+    if (!trimmed || busy) return
     setInput('')
-    const newUserIdx = messages.length
-    send(trimmed)
-    scrollNewUserMessageToTop(newUserIdx)
+    submit(trimmed)
   }
 
   const handleNewChat = () => {
@@ -35,27 +28,21 @@ function App() {
 
   return (
     <div className="app">
-      <AnimatePresence>{!chatStarted && <Hero />}</AnimatePresence>
+      <WaveField intensity={intensity} />
 
-      <AnimatePresence>
-        {chatStarted && (
-          <MessageList
-            messages={messages}
-            containerRef={containerRef}
-            spacerRef={spacerRef}
-            registerMessage={registerMessage}
-          />
-        )}
-      </AnimatePresence>
+      <main className="stage-wrap">
+        <MessageStage role={role} text={text} phase={phase} />
+      </main>
 
-      <InputBar
-        ref={inputBarRef}
+      <InputDock
+        ref={dockRef}
         textareaRef={textareaRef}
         value={input}
         onChange={setInput}
         onSend={handleSend}
         onNewChat={handleNewChat}
-        chatStarted={chatStarted}
+        started={started}
+        disabled={busy}
       />
     </div>
   )

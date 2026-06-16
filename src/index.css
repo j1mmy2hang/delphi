@@ -5,16 +5,6 @@
 :root {
   color-scheme: light dark;
 
-  --content-width: 760px;
-
-  /* Bubble geometry — the avatar and loading state derive their size from these
-     so a single-line bubble, the δ avatar, and the typing indicator stay equal. */
-  --bubble-pad-y: 10px;
-  --bubble-pad-x: 15px;
-  --bubble-font: 16px;
-  --bubble-line: 1.6;
-  --bubble-1line: calc(2 * var(--bubble-pad-y) + var(--bubble-font) * var(--bubble-line));
-
   /* Type */
   --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
@@ -22,47 +12,50 @@
 
   /* Light palette — warm paper */
   --bg: #F7F5F0;
+  --bg-deep: #EFEBE2;
   --text: #26262B;
   --text-secondary: #8A887F;
   --text-tertiary: #B6B3A9;
 
   --accent: #293452;
-  --accent-strong: #323F63;
   --accent-text: #F2EFE6;
-
-  --bubble-assistant-bg: #EAE6DD;
-
-  --bubble-shadow: 0 1px 2px rgba(28, 32, 48, 0.10);
 
   --field-idle: rgba(20, 22, 30, 0.05);
   --icon-muted: #9A988E;
 
-  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.70) 0%, rgba(255, 255, 255, 0.40) 100%);
+  /* Halo that lifts text off the living wave */
+  --halo: rgba(247, 245, 240, 0.92);
+  --halo-soft: rgba(247, 245, 240, 0.6);
+
+  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.34) 100%);
   --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-shadow: 0 4px 24px rgba(28, 32, 48, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 40px rgba(28, 32, 48, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  --accent-ring: rgba(41, 52, 82, 0.22);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1A1917;
+    --bg-deep: #131210;
     --text: #E9E6DE;
     --text-secondary: #908D83;
     --text-tertiary: #5D5B53;
 
-    --accent: #3C4B76;
-    --accent-strong: #46578A;
+    --accent: #46578A;
     --accent-text: #EFEDE6;
-
-    --bubble-assistant-bg: #2A2825;
-
-    --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.40);
 
     --field-idle: rgba(255, 255, 255, 0.07);
     --icon-muted: #8A877E;
 
-    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.72) 0%, rgba(48, 46, 42, 0.42) 100%);
+    --halo: rgba(20, 18, 16, 0.9);
+    --halo-soft: rgba(20, 18, 16, 0.55);
+
+    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.66) 0%, rgba(48, 46, 42, 0.38) 100%);
     --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-shadow: 0 6px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 10px 44px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+    --accent-ring: rgba(120, 140, 210, 0.3);
   }
 }
 
@@ -81,17 +74,12 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  /* Lock the page so iOS cannot scroll it when the keyboard opens */
   position: fixed;
   top: 0;
   left: 0;
 }
 
-#root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
+#root { height: 100%; width: 100%; overflow: hidden; }
 
 body {
   font-family: var(--font-sans);
@@ -111,264 +99,189 @@ input, textarea, button {
 }
 
 button { cursor: pointer; }
-
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
-@media (prefers-reduced-motion: reduce) {
-  .loading-dots span { animation: none; opacity: 0.5; }
-}
-
 /* ============================================================
-   Layout
+   App shell + depth
    ============================================================ */
 
 .app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  max-width: var(--content-width);
-  margin: 0 auto;
   position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* a soft, layered light source from above-centre for depth */
+  background:
+    radial-gradient(130% 90% at 50% 22%, var(--bg) 0%, var(--bg-deep) 100%);
 }
 
 /* ============================================================
-   Hero
+   Wave — the centrepiece
    ============================================================ */
 
-.hero {
-  flex: 1;
+.wave {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.wave-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wave-canvas-hidden { display: none; }
+
+/* CSS aurora used only when WebGL is unavailable */
+.wave-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(50% 34% at 50% 50%, var(--accent) 0%, transparent 70%),
+    radial-gradient(38% 26% at 38% 46%, var(--accent) 0%, transparent 72%),
+    radial-gradient(40% 26% at 64% 54%, var(--accent) 0%, transparent 72%);
+  opacity: 0.3;
+  filter: blur(34px) saturate(1.2);
+  animation: aurora 9s ease-in-out infinite;
+}
+
+@keyframes aurora {
+  0%, 100% { transform: translateX(-3%) scaleY(0.92); opacity: 0.24; }
+  50%      { transform: translateX(3%) scaleY(1.08);  opacity: 0.36; }
+}
+
+/* ============================================================
+   Stage — the single living message
+   ============================================================ */
+
+.stage-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9vh 28px 22vh;
+  pointer-events: none;
+}
+
+.stage {
+  width: 100%;
+  max-width: 640px;
+  will-change: transform, opacity, filter;
+}
+
+.stage-inner { will-change: transform; }
+
+.stage-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+
+/* ---------- Idle wordmark ---------- */
+
+.stage-idle { text-align: center; font-family: var(--font-serif); }
+
+.stage-wordmark {
+  font-size: clamp(46px, 9vw, 76px);
+  font-weight: 400;
+  letter-spacing: 1.5px;
+  color: var(--text);
+  text-shadow: 0 0 40px var(--halo), 0 1px 2px var(--halo);
+}
+
+.stage-subtitle {
+  margin-top: 16px;
+  font-size: clamp(16px, 2.6vw, 21px);
+  color: var(--text-secondary);
+  letter-spacing: 0.4px;
+  text-shadow: 0 0 24px var(--halo);
+}
+
+/* ---------- Message text ---------- */
+
+/* User question and assistant reply share one identical treatment. */
+.stage-text {
+  pointer-events: auto;
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3.4vw, 29px);
+  line-height: 1.5;
+  letter-spacing: 0.2px;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--text);
+  max-width: 20em;
+  margin: 0 auto;
+  max-height: 66vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* halo keeps every line legible over the moving light */
+  text-shadow: 0 0 26px var(--halo), 0 0 10px var(--halo), 0 1px 2px var(--halo-soft);
+}
+
+.stage-text.markdown strong { font-weight: 600; }
+.stage-text.markdown em { font-style: italic; }
+.stage-text p + p { margin-top: 0.9em; }
+
+/* ============================================================
+   Dock — the input
+   ============================================================ */
+
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  padding-bottom: 100px;
-  font-family: var(--font-serif);
+  gap: 12px;
+  padding: 14px 18px calc(22px + env(safe-area-inset-bottom));
 }
 
-.hero-title {
-  font-size: 44px;
-  font-weight: 400;
-  letter-spacing: 1px;
-  color: var(--text);
-  margin-bottom: 14px;
-}
-
-.hero-subtitle {
-  font-size: 19px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  letter-spacing: 0.3px;
-}
-
-.hero-credit {
-  position: absolute;
-  top: calc(60% + 76px);
+.dock-new {
   font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
   color: var(--text-tertiary);
-  letter-spacing: 0.3px;
-  font-family: var(--font-sans);
-}
-
-.hero-credit a {
-  color: var(--text-tertiary);
-  text-decoration: none;
+  padding: 4px 8px;
   transition: color 0.2s ease;
 }
 
-.hero-credit a:hover { color: var(--text-secondary); }
-
-@media (min-width: 768px) {
-  .hero-title { font-size: 60px; }
-  .hero-subtitle { font-size: 27px; }
-}
-
-/* ============================================================
-   Messages
-   ============================================================ */
-
-.messages-wrapper {
-  position: fixed;
-  inset: 0;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
-}
-
-.messages-scroll {
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  padding: 72px 20px 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-@media (min-width: 768px) {
-  .messages-scroll { padding-left: 28px; padding-right: 28px; }
-}
-
-/* Spacer below the last message. Height is set dynamically by useChatScroll so
-   that (a) a freshly sent user message can pin to the top of the viewport, and
-   (b) once content fills the screen, the last assistant bottom rests near the
-   vertical middle when scrolled all the way down. */
-.messages-bottom-spacer {
-  flex-shrink: 0;
-}
-
-.msg-row { display: flex; }
-
-.msg-row-user { justify-content: flex-end; }
-
-/* A turn is "user → assistant"; add space after the assistant before the next
-   user message, keeping each question tight to its answer. */
-.msg-row-assistant {
-  justify-content: flex-start;
-  margin-bottom: 14px;
-}
-
-/* ---------- Bubbles ---------- */
-
-.bubble {
-  padding: var(--bubble-pad-y) var(--bubble-pad-x);
-  border-radius: 20px;
-  font-size: var(--bubble-font);
-  line-height: var(--bubble-line);
-  white-space: pre-wrap;
-  word-break: break-word;
-  box-shadow: var(--bubble-shadow);
-}
-
-.bubble-user {
-  max-width: 78%;
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-.bubble-assistant {
-  max-width: 82%;
-  min-width: 0;
-  background: var(--bubble-assistant-bg);
-  color: var(--text);
-}
-
-.markdown strong { font-weight: 600; }
-.markdown em { font-style: italic; }
-
-@media (min-width: 768px) {
-  :root { --bubble-font: 16.5px; }
-}
-
-/* ---------- Assistant row (avatar + bubble) ---------- */
-
-.assistant {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-}
-
-.assistant-mark {
-  flex-shrink: 0;
-  /* Same height as a single-line bubble, top-aligned, so the avatar and a
-     one-line reply are exactly the same size and edge-to-edge. */
-  width: var(--bubble-1line);
-  height: var(--bubble-1line);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-family: var(--font-serif);
-  font-size: calc(var(--bubble-1line) * 0.45);
-  line-height: 1;
-  user-select: none;
-}
-
-/* ---------- Loading dots ---------- */
-
-.loading-dots {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  /* One line tall, so the typing bubble matches a single-line text bubble. */
-  height: calc(var(--bubble-font) * var(--bubble-line));
-}
-
-.loading-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  opacity: 0.4;
-  animation: dot-pulse 1.2s ease-in-out infinite;
-}
-
-.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes dot-pulse {
-  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
-  30%           { opacity: 0.9;  transform: translateY(-3px); }
-}
-
-/* ============================================================
-   Input bar
-   ============================================================ */
-
-.input-bar {
-  left: 0;
-  right: 0;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  z-index: 20;
-}
-
-.input-bar-hero {
-  position: absolute;
-  top: 55%;
-  padding: 0 24px;
-}
-
-.input-bar-fixed {
-  position: fixed;
-  bottom: 0;
-  padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
-}
-
-.input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
+.dock-new:hover { color: var(--text-secondary); }
 
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
-.input-field {
-  flex: 1;
+.dock-field {
+  width: 100%;
+  max-width: 600px;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  border-radius: 24px;
-  padding: 8px 8px 8px 20px;
+  border-radius: 26px;
+  padding: 9px 9px 9px 22px;
+  transition: box-shadow 0.3s ease;
 }
 
-.input-textarea {
+.dock-field.is-busy { animation: dock-pulse 2s ease-in-out infinite; }
+
+@keyframes dock-pulse {
+  0%, 100% { box-shadow: var(--glass-shadow); }
+  50%      { box-shadow: var(--glass-shadow), 0 0 0 1px var(--accent-ring), 0 0 22px var(--accent-ring); }
+}
+
+.dock-textarea {
   flex: 1;
   font-size: 16px;
   line-height: 1.5;
@@ -376,14 +289,14 @@ button:focus-visible {
   resize: none;
   background: transparent;
   max-height: 120px;
-  padding: 4px 0;
+  padding: 5px 0;
 }
 
-.input-textarea::placeholder { color: var(--text-tertiary); }
+.dock-textarea::placeholder { color: var(--text-tertiary); }
 
-.send-btn {
-  width: 32px;
-  height: 32px;
+.dock-send {
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--field-idle);
   color: var(--icon-muted);
@@ -391,21 +304,15 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
-.send-btn-active {
-  background: var(--accent);
-  color: var(--accent-text);
-}
+.dock-send.is-active { background: var(--accent); color: var(--accent-text); }
 
-.new-chat-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 24px;
-  flex-shrink: 0;
-  color: var(--icon-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ============================================================
+   Motion preferences
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-fallback, .dock-field.is-busy { animation: none; }
 }
