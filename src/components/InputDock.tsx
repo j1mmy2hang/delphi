@@ -68,7 +68,7 @@ export const InputDock = forwardRef<HTMLDivElement, Props>(
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask the wave…"
+            placeholder="Ask Delphi…"
             rows={1}
             className="dock-textarea"
           />

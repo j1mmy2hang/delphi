@@ -3,60 +3,36 @@
    ============================================================ */
 
 :root {
-  color-scheme: light dark;
+  /* The prismatic burst lives on a cinematic dark stage so its colours sing. */
+  color-scheme: dark;
 
   /* Type */
   --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
     'PingFang SC', 'Segoe UI', system-ui, sans-serif;
 
-  /* Light palette — warm paper */
-  --bg: #F7F5F0;
-  --bg-deep: #EFEBE2;
-  --text: #26262B;
-  --text-secondary: #8A887F;
-  --text-tertiary: #B6B3A9;
+  /* Deep, near-black indigo so the cool spectrum reads */
+  --bg: #0A0A12;
+  --bg-deep: #050509;
+  --text: #ECEAF4;
+  --text-secondary: #918FA6;
+  --text-tertiary: #5C5A74;
 
-  --accent: #293452;
-  --accent-text: #F2EFE6;
+  --accent: #6E5BD6;
+  --accent-text: #F3F0FB;
 
-  --field-idle: rgba(20, 22, 30, 0.05);
-  --icon-muted: #9A988E;
+  --field-idle: rgba(255, 255, 255, 0.08);
+  --icon-muted: #9D9AB4;
 
-  /* Halo that lifts text off the living wave */
-  --halo: rgba(247, 245, 240, 0.92);
-  --halo-soft: rgba(247, 245, 240, 0.6);
+  /* Dark halo that lifts light text off the vivid burst */
+  --halo: rgba(6, 6, 14, 0.92);
+  --halo-soft: rgba(6, 6, 14, 0.6);
 
-  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.34) 100%);
-  --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-shadow: 0 8px 40px rgba(28, 32, 48, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-bg: linear-gradient(135deg, rgba(30, 30, 48, 0.55) 0%, rgba(20, 20, 34, 0.32) 100%);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 12px 48px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
-  --accent-ring: rgba(41, 52, 82, 0.22);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1A1917;
-    --bg-deep: #131210;
-    --text: #E9E6DE;
-    --text-secondary: #908D83;
-    --text-tertiary: #5D5B53;
-
-    --accent: #46578A;
-    --accent-text: #EFEDE6;
-
-    --field-idle: rgba(255, 255, 255, 0.07);
-    --icon-muted: #8A877E;
-
-    --halo: rgba(20, 18, 16, 0.9);
-    --halo-soft: rgba(20, 18, 16, 0.55);
-
-    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.66) 0%, rgba(48, 46, 42, 0.38) 100%);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-shadow: 0 10px 44px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-
-    --accent-ring: rgba(120, 140, 210, 0.3);
-  }
+  --accent-ring: rgba(150, 140, 235, 0.35);
 }
 
 /* ============================================================
@@ -113,48 +89,39 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   height: 100%;
   width: 100%;
   overflow: hidden;
-  /* a soft, layered light source from above-centre for depth */
   background:
-    radial-gradient(130% 90% at 50% 22%, var(--bg) 0%, var(--bg-deep) 100%);
+    radial-gradient(130% 95% at 50% 18%, var(--bg) 0%, var(--bg-deep) 100%);
 }
 
 /* ============================================================
-   Wave — the centrepiece
+   Prismatic burst — the centrepiece
    ============================================================ */
 
-.wave {
+.prismatic {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
 }
 
-.wave-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
+/* Screen-blend the opaque burst onto the deep gradient: near-black rays keep
+   the gradient, bright rays glow additively. */
+.prismatic canvas {
+  mix-blend-mode: screen;
 }
 
-.wave-canvas-hidden { display: none; }
-
-/* CSS aurora used only when WebGL is unavailable */
-.wave-fallback {
-  position: absolute;
+/* Focal scrim — gently darkens the centre so a message reads while the burst
+   keeps glowing around it. */
+.stage-scrim {
+  position: fixed;
   inset: 0;
+  z-index: 1;
+  pointer-events: none;
   background:
-    radial-gradient(50% 34% at 50% 50%, var(--accent) 0%, transparent 70%),
-    radial-gradient(38% 26% at 38% 46%, var(--accent) 0%, transparent 72%),
-    radial-gradient(40% 26% at 64% 54%, var(--accent) 0%, transparent 72%);
-  opacity: 0.3;
-  filter: blur(34px) saturate(1.2);
-  animation: aurora 9s ease-in-out infinite;
-}
-
-@keyframes aurora {
-  0%, 100% { transform: translateX(-3%) scaleY(0.92); opacity: 0.24; }
-  50%      { transform: translateX(3%) scaleY(1.08);  opacity: 0.36; }
+    radial-gradient(60% 42% at 50% 53%,
+      rgba(5, 5, 12, 0.62) 0%,
+      rgba(5, 5, 12, 0.32) 42%,
+      transparent 72%);
 }
 
 /* ============================================================
@@ -168,7 +135,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 9vh 28px 22vh;
+  /* Balanced top/bottom so the message sits at the burst's true visual centre
+     (slightly below the geometric middle), not floating high. */
+  padding: 19vh 28px 15vh;
   pointer-events: none;
 }
 
@@ -177,6 +146,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   max-width: 640px;
   will-change: transform, opacity, filter;
 }
+
+/* The ascending-words overlay rides above the dissolving old content. */
+.ascend-wrap { z-index: 3; }
+.ascend-wrap .stage-text { will-change: transform, opacity, filter; }
 
 .stage-inner { will-change: transform; }
 
@@ -314,5 +287,5 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .wave-fallback, .dock-field.is-busy { animation: none; }
+  .dock-field.is-busy { animation: none; }
 }

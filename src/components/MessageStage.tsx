@@ -77,10 +77,9 @@ export const MessageStage = ({ role, text, phase }: Props) => {
       case 'idle': // Delphi wordmark coalesces out of the cloud on load
         materialise(1.4)
         break
-      case 'rising': // the question materialises (identical to a reply forming)
-        materialise(STAGE.RISE)
-        break
-      case 'forming': // the reply materialises
+      // 'rising' (the user's question) is handled by the AscendingMessage overlay,
+      // which flies it up from the input; here we only form replies & the wordmark.
+      case 'forming': // the reply materialises out of the cloud
         materialise(STAGE.FORM)
         break
       case 'dissolving': // the message melts back into the wave

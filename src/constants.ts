@@ -19,21 +19,21 @@ export const SPRING_RISE: Transition = { type: 'spring', stiffness: 150, damping
 // it rises from the dock, vibes inside the wave while thinking, dissolves into
 // the cloud, and the reply forms back out of it.
 // ----------------------------------------------------------------------------
-// Both roles emerge and dissolve identically; RISE === FORM keeps them in sync.
 export const STAGE = {
-  RISE: 1.25,      // a message materialises out of the wave
+  RISE: 1.25,      // the typed words ascend from the input to the centre
   DISSOLVE: 1.05,  // a message melts back into the cloud
-  FORM: 1.25,      // identical to RISE so user/assistant match exactly
-  MIN_THINK: 1.3,  // floor so the wave always "thinks" for a beat
+  FORM: 1.25,      // the reply forms out of the cloud
+  MIN_THINK: 0.9,  // min dwell the question rests at centre before dissolving
 } as const
 
-// Target wave energy per phase (0 calm … 1 churning). WaveField eases toward it.
-// Kept gentle — even "thinking" only stirs the wave a little.
+// Conversation energy per phase (0 calm … 1 churning). PrismaticBurst eases its
+// speed, brightness AND ray distortion toward this, so each stage reads at a
+// glance: a clear calm → build → peak → ease → calm arc.
 export const WAVE_INTENSITY: Record<string, number> = {
-  idle: 0.08,
-  rising: 0.3,
-  thinking: 0.5,
-  dissolving: 0.6,
-  forming: 0.38,
-  settled: 0.16,
+  idle: 0.05,      // barely drifting, dim, contemplative
+  rising: 0.45,    // energy gathers as the question forms
+  thinking: 0.85,  // fast, bright, writhing — the oracle working
+  dissolving: 1,   // the peak — rays whip as the message breaks apart
+  forming: 0.5,    // easing down as the reply materialises
+  settled: 0.12,   // calm again, a touch more alive than idle
 }
