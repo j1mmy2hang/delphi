@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
-
-const EASE = [0.25, 0.1, 0.25, 1] as const
+import { EASE } from '../constants'
 
 export const Hero = () => (
   <motion.div

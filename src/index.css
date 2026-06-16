@@ -1,3 +1,75 @@
+/* ============================================================
+   Design tokens
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  --content-width: 760px;
+
+  /* Bubble geometry — the avatar and loading state derive their size from these
+     so a single-line bubble, the δ avatar, and the typing indicator stay equal. */
+  --bubble-pad-y: 10px;
+  --bubble-pad-x: 15px;
+  --bubble-font: 16px;
+  --bubble-line: 1.6;
+  --bubble-1line: calc(2 * var(--bubble-pad-y) + var(--bubble-font) * var(--bubble-line));
+
+  /* Type */
+  --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
+    'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+
+  /* Light palette — warm paper */
+  --bg: #F7F5F0;
+  --text: #26262B;
+  --text-secondary: #8A887F;
+  --text-tertiary: #B6B3A9;
+
+  --accent: #293452;
+  --accent-strong: #323F63;
+  --accent-text: #F2EFE6;
+
+  --bubble-assistant-bg: #EAE6DD;
+
+  --bubble-shadow: 0 1px 2px rgba(28, 32, 48, 0.10);
+
+  --field-idle: rgba(20, 22, 30, 0.05);
+  --icon-muted: #9A988E;
+
+  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.70) 0%, rgba(255, 255, 255, 0.40) 100%);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 4px 24px rgba(28, 32, 48, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1A1917;
+    --text: #E9E6DE;
+    --text-secondary: #908D83;
+    --text-tertiary: #5D5B53;
+
+    --accent: #3C4B76;
+    --accent-strong: #46578A;
+    --accent-text: #EFEDE6;
+
+    --bubble-assistant-bg: #2A2825;
+
+    --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.40);
+
+    --field-idle: rgba(255, 255, 255, 0.07);
+    --icon-muted: #8A877E;
+
+    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.72) 0%, rgba(48, 46, 42, 0.42) 100%);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 6px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
 * {
   margin: 0;
   padding: 0;
@@ -22,16 +94,17 @@ html, body {
 }
 
 body {
-  font-family: 'Hedvig Letters Serif', 'Noto Serif SC', Georgia, serif;
-  background: #F7F5F0;
-  color: #2C2E35;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-variant-ligatures: none;
+  text-rendering: optimizeLegibility;
 }
 
 input, textarea, button {
   font-family: inherit;
+  color: inherit;
   outline: none;
   border: none;
   background: none;
@@ -39,21 +112,34 @@ input, textarea, button {
 
 button { cursor: pointer; }
 
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
-/* ---------- Layout ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .loading-dots span { animation: none; opacity: 0.5; }
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
 
 .app {
   height: 100%;
   display: flex;
   flex-direction: column;
-  max-width: 780px;
+  max-width: var(--content-width);
   margin: 0 auto;
   position: relative;
 }
 
-/* ---------- Hero ---------- */
+/* ============================================================
+   Hero
+   ============================================================ */
 
 .hero {
   flex: 1;
@@ -62,52 +148,54 @@ button { cursor: pointer; }
   justify-content: center;
   align-items: center;
   padding-bottom: 100px;
+  font-family: var(--font-serif);
 }
 
 .hero-title {
-  font-size: 42px;
+  font-size: 44px;
   font-weight: 400;
-  letter-spacing: 2px;
-  color: #1a1a1a;
-  margin-bottom: 16px;
-  font-family: Cochin, Georgia, serif;
+  letter-spacing: 1px;
+  color: var(--text);
+  margin-bottom: 14px;
 }
 
 .hero-subtitle {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 400;
-  color: #999;
-  letter-spacing: 0.5px;
-  font-family: Cochin, Georgia, serif;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
 }
 
 .hero-credit {
   position: absolute;
   top: calc(60% + 76px);
   font-size: 12px;
-  color: #bbb;
+  color: var(--text-tertiary);
   letter-spacing: 0.3px;
+  font-family: var(--font-sans);
 }
 
 .hero-credit a {
-  color: #bbb;
+  color: var(--text-tertiary);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
-.hero-credit a:hover { color: #888; }
+.hero-credit a:hover { color: var(--text-secondary); }
 
 @media (min-width: 768px) {
-  .hero-title { font-size: 58px; }
+  .hero-title { font-size: 60px; }
   .hero-subtitle { font-size: 27px; }
 }
 
-/* ---------- Messages ---------- */
+/* ============================================================
+   Messages
+   ============================================================ */
 
 .messages-wrapper {
   position: fixed;
   inset: 0;
-  max-width: 780px;
+  max-width: var(--content-width);
   margin: 0 auto;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
@@ -121,7 +209,11 @@ button { cursor: pointer; }
   padding: 72px 20px 100px;
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 22px;
+}
+
+@media (min-width: 768px) {
+  .messages-scroll { padding-left: 28px; padding-right: 28px; }
 }
 
 /* Spacer below the last message. Height is set dynamically by useChatScroll so
@@ -134,86 +226,72 @@ button { cursor: pointer; }
 
 .msg-row { display: flex; }
 
-.msg-row-user {
-  justify-content: flex-end;
-  margin-bottom: 2px;
-}
+.msg-row-user { justify-content: flex-end; }
 
+/* A turn is "user → assistant"; add space after the assistant before the next
+   user message, keeping each question tight to its answer. */
 .msg-row-assistant {
   justify-content: flex-start;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
-.msg-inner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  max-width: 85%;
-}
-
-.msg-row-user .msg-inner { flex-direction: row-reverse; }
-
-/* ---------- Avatar ---------- */
-/* Height matches a single-line bubble: 2 * padY + fontSize * lineHeight */
-
-:root {
-  --bubble-pad-y: 10px;
-  --bubble-font: 15.5px;
-  --bubble-line: 1.65;
-  --avatar-size: calc(2 * var(--bubble-pad-y) + var(--bubble-font) * var(--bubble-line));
-}
-
-@media (min-width: 768px) {
-  :root { --bubble-pad-y: 11px; }
-}
-
-.avatar {
-  width: var(--avatar-size);
-  height: var(--avatar-size);
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #888;
-}
-
-.avatar-user {
-  background: #293452;
-  font-size: 13px;
-}
-
-.avatar-assistant {
-  background: #E2E2E2;
-  font-size: 19px;
-  outline: 1px solid rgba(0,0,0,0.02);
-}
-
-@media (min-width: 768px) {
-  .avatar-user { font-size: 15px; }
-  .avatar-assistant { font-size: 22px; }
-}
-
-/* ---------- Bubble ---------- */
+/* ---------- Bubbles ---------- */
 
 .bubble {
-  padding: var(--bubble-pad-y) 16px;
-  border-radius: 22px;
+  padding: var(--bubble-pad-y) var(--bubble-pad-x);
+  border-radius: 20px;
   font-size: var(--bubble-font);
   line-height: var(--bubble-line);
   white-space: pre-wrap;
   word-break: break-word;
+  box-shadow: var(--bubble-shadow);
 }
 
 .bubble-user {
-  background: #293452;
-  color: #F0EDE4;
+  max-width: 78%;
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .bubble-assistant {
-  background: #E2E2E2;
-  color: #1a1a1a;
-  outline: 1px solid rgba(0,0,0,0.02);
+  max-width: 82%;
+  min-width: 0;
+  background: var(--bubble-assistant-bg);
+  color: var(--text);
+}
+
+.markdown strong { font-weight: 600; }
+.markdown em { font-style: italic; }
+
+@media (min-width: 768px) {
+  :root { --bubble-font: 16.5px; }
+}
+
+/* ---------- Assistant row (avatar + bubble) ---------- */
+
+.assistant {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.assistant-mark {
+  flex-shrink: 0;
+  /* Same height as a single-line bubble, top-aligned, so the avatar and a
+     one-line reply are exactly the same size and edge-to-edge. */
+  width: var(--bubble-1line);
+  height: var(--bubble-1line);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: var(--font-serif);
+  font-size: calc(var(--bubble-1line) * 0.45);
+  line-height: 1;
+  user-select: none;
 }
 
 /* ---------- Loading dots ---------- */
@@ -222,14 +300,15 @@ button { cursor: pointer; }
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: var(--bubble-pad-y) 4px;
+  /* One line tall, so the typing bubble matches a single-line text bubble. */
+  height: calc(var(--bubble-font) * var(--bubble-line));
 }
 
 .loading-dots span {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #999;
+  background: var(--text-secondary);
   opacity: 0.4;
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
@@ -242,12 +321,14 @@ button { cursor: pointer; }
   30%           { opacity: 0.9;  transform: translateY(-3px); }
 }
 
-/* ---------- Input bar ---------- */
+/* ============================================================
+   Input bar
+   ============================================================ */
 
 .input-bar {
   left: 0;
   right: 0;
-  max-width: 780px;
+  max-width: var(--content-width);
   margin: 0 auto;
   z-index: 20;
 }
@@ -261,7 +342,7 @@ button { cursor: pointer; }
 .input-bar-fixed {
   position: fixed;
   bottom: 0;
-  padding: 12px 16px 28px;
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
 }
 
 .input-row {
@@ -271,11 +352,11 @@ button { cursor: pointer; }
 }
 
 .glass {
-  background: linear-gradient(135deg, rgba(246,246,246,0.65) 0%, rgba(246,246,246,0.3) 100%);
+  background: var(--glass-bg);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(246,246,246,0.5);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(246,246,246,0.5);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .input-field {
@@ -283,44 +364,47 @@ button { cursor: pointer; }
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  border-radius: 22px;
+  border-radius: 24px;
   padding: 8px 8px 8px 20px;
 }
 
 .input-textarea {
   flex: 1;
-  font-size: 15.5px;
+  font-size: 16px;
   line-height: 1.5;
-  color: #1a1a1a;
+  color: var(--text);
   resize: none;
   background: transparent;
   max-height: 120px;
   padding: 4px 0;
 }
 
-@media (min-width: 768px) {
-  .input-textarea { font-size: 16px; }
-}
+.input-textarea::placeholder { color: var(--text-tertiary); }
 
 .send-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.04);
+  background: var(--field-idle);
+  color: var(--icon-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.send-btn-active { background: #293452; }
+.send-btn-active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
 
 .new-chat-btn {
-  width: 50px;
-  height: 50px;
-  border-radius: 25px;
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
   flex-shrink: 0;
+  color: var(--icon-muted);
   display: flex;
   align-items: center;
   justify-content: center;

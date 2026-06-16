@@ -2,8 +2,8 @@ import { forwardRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { MessageCirclePlus } from 'lucide-react'
 import { isTouchDevice } from '../hooks/device'
+import { SPRING, SPRING_SOFT } from '../constants'
 
-const EASE = [0.25, 0.1, 0.25, 1] as const
 const TEXTAREA_MAX_HEIGHT = 120
 
 interface Props {
@@ -51,13 +51,13 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
       <motion.div
         ref={ref}
         layout
-        transition={{ duration: 0.5, ease: EASE }}
+        transition={SPRING_SOFT}
         className={`input-bar ${chatStarted ? 'input-bar-fixed' : 'input-bar-hero'}`}
       >
-        <motion.div layout transition={{ duration: 0.3, ease: EASE }} className="input-row">
+        <motion.div layout transition={SPRING_SOFT} className="input-row">
           <motion.div
             layout
-            transition={{ duration: 0.3, ease: EASE }}
+            transition={SPRING_SOFT}
             className="input-field glass"
           >
             <textarea
@@ -70,12 +70,13 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
               className="input-textarea"
             />
             <motion.button
-              whileTap={{ scale: 0.92 }}
+              whileTap={{ scale: 0.88 }}
+              transition={SPRING}
               onClick={handleSend}
               className={`send-btn ${hasInput ? 'send-btn-active' : ''}`}
               aria-label="Send"
             >
-              <SendIcon active={hasInput} />
+              <SendIcon />
             </motion.button>
           </motion.div>
 
@@ -85,13 +86,13 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3, ease: EASE }}
-                whileTap={{ scale: 0.92 }}
+                transition={SPRING}
+                whileTap={{ scale: 0.88 }}
                 onClick={onNewChat}
                 className="new-chat-btn glass"
                 aria-label="New chat"
               >
-                <MessageCirclePlus size={20} stroke="#555" strokeWidth={1.8} />
+                <MessageCirclePlus size={20} strokeWidth={1.8} />
               </motion.button>
             )}
           </AnimatePresence>
@@ -103,10 +104,10 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
 
 InputBar.displayName = 'InputBar'
 
-const SendIcon = ({ active }: { active: boolean }) => (
+const SendIcon = () => (
   <svg
     width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke={active ? '#F0EDE4' : '#bbb'}
+    stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
   >
     <line x1="12" y1="19" x2="12" y2="5" />

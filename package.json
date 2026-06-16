@@ -1,7 +1,7 @@
 {
   "name": "delphi-web-2",
   "version": "1.0.0",
-  "description": "",
+  "description": "Delphi — an AI thinking companion with a custom system prompt.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Jimmy Zhang",
+  "license": "MIT",
   "dependencies": {
     "@netlify/functions": "^5.1.5",
     "framer-motion": "^12.38.0",

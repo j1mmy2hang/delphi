@@ -17,7 +17,7 @@ Delphi is a modern, AI-powered thinking companion designed to help you "Know Thy
 - **Frontend**: [React 19](https://react.dev/), [Vite](https://vitejs.dev/)
 - **Styling**: [Vanilla CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) + [Framer Motion](https://www.framer.com/motion/)
 - **Backend**: [Netlify Functions](https://www.netlify.com/products/functions/) (TypeScript)
-- **AI Engine**: [OpenRouter](https://openrouter.ai/) (supporting Claude 3.5 Sonnet and other LLMs)
+- **AI Engine**: [OpenRouter](https://openrouter.ai/) (Claude Sonnet 4.6, swappable for other LLMs)
 
 ## 🚀 Getting Started
 
