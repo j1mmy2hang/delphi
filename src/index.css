@@ -311,6 +311,40 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
 .dock-send.is-active { background: var(--accent); color: var(--accent-text); }
 
 /* ============================================================
+   Liquid glass — the input field on supported (Chromium) platforms
+   ============================================================ */
+
+.lg-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+
+/* Refraction lives in the SVG filter (backdrop-filter: url). The element only
+   carries a faint tint + the specular rim highlight on top. */
+.dock-field.liquid {
+  position: relative;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: url(#lg-dock);
+  backdrop-filter: url(#lg-dock);
+  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Specular rim — a bright bevel of light along the glass edge. Its opacity is
+   the fourth slider (Specular Opacity). */
+.dock-field.liquid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--lg-spec, 0.55);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 1.5px 0 4px rgba(255, 255, 255, 0.18),
+    inset -1.5px 0 4px rgba(255, 255, 255, 0.18),
+    inset 0 -2px 6px rgba(255, 255, 255, 0.22);
+}
+
+/* ============================================================
    Motion preferences
    ============================================================ */
 

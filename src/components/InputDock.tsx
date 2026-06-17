@@ -1,9 +1,11 @@
-import { forwardRef } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isTouchDevice } from '../hooks/device'
+import { LiquidGlassFilter, type GlassParams } from './LiquidGlass'
 import { SPRING } from '../constants'
 
 const TEXTAREA_MAX_HEIGHT = 120
+const FILTER_ID = 'lg-dock'
 
 interface Props {
   value: string
@@ -12,12 +14,28 @@ interface Props {
   onNewChat: () => void
   started: boolean
   disabled: boolean
+  liquid: boolean
+  glass: GlassParams
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
 }
 
 export const InputDock = forwardRef<HTMLDivElement, Props>(
-  ({ value, onChange, onSend, onNewChat, started, disabled, textareaRef }, ref) => {
+  ({ value, onChange, onSend, onNewChat, started, disabled, liquid, glass, textareaRef }, ref) => {
     const hasInput = value.trim().length > 0
+    const fieldRef = useRef<HTMLDivElement>(null)
+    const [size, setSize] = useState({ w: 0, h: 0 })
+
+    // Track the field's border-box so the displacement map matches it exactly.
+    useEffect(() => {
+      if (!liquid) return
+      const el = fieldRef.current
+      if (!el) return
+      const measure = () => setSize({ w: el.offsetWidth, h: el.offsetHeight })
+      measure()
+      const ro = new ResizeObserver(measure)
+      ro.observe(el)
+      return () => ro.disconnect()
+    }, [liquid])
 
     const handleSend = () => {
       if (!hasInput || disabled) return
@@ -42,6 +60,13 @@ export const InputDock = forwardRef<HTMLDivElement, Props>(
       el.style.height = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT) + 'px'
     }
 
+    const radius = size.h / 2 // a capsule
+    const bezel = Math.min(radius, Math.max(10, size.h * 0.42))
+
+    const fieldStyle = liquid
+      ? ({ borderRadius: radius, ['--lg-spec']: glass.specular } as React.CSSProperties)
+      : undefined
+
     return (
       <div ref={ref} className="dock">
         <AnimatePresence>
@@ -62,7 +87,11 @@ export const InputDock = forwardRef<HTMLDivElement, Props>(
           )}
         </AnimatePresence>
 
-        <div className={`dock-field glass ${disabled ? 'is-busy' : ''}`}>
+        <div
+          ref={fieldRef}
+          style={fieldStyle}
+          className={`dock-field ${liquid ? 'liquid' : 'glass'} ${disabled ? 'is-busy' : ''}`}
+        >
           <textarea
             ref={textareaRef}
             value={value}
@@ -82,6 +111,19 @@ export const InputDock = forwardRef<HTMLDivElement, Props>(
             <SendIcon />
           </motion.button>
         </div>
+
+        {liquid && size.w > 4 && (
+          <LiquidGlassFilter
+            id={FILTER_ID}
+            width={size.w}
+            height={size.h}
+            radius={radius}
+            bezel={bezel}
+            refraction={glass.refraction}
+            blur={glass.blur}
+            saturation={glass.saturation}
+          />
+        )}
       </div>
     )
   },

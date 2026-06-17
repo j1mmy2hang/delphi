@@ -3,8 +3,10 @@ import { PrismaticBurst } from './components/PrismaticBurst'
 import { MessageStage } from './components/MessageStage'
 import { AscendingMessage } from './components/AscendingMessage'
 import { InputDock } from './components/InputDock'
+import { GLASS_DEFAULTS } from './components/LiquidGlass'
 import { useConversationStage } from './hooks/useConversationStage'
 import { useViewportKeyboard } from './hooks/useViewportKeyboard'
+import { useLiquidGlassSupport } from './hooks/useLiquidGlassSupport'
 
 // Resting centre of the stage as a fraction of viewport height — must match the
 // .stage-wrap padding (top 19vh / bottom 15vh → centre at 0.52).
@@ -26,6 +28,8 @@ function App() {
   const flightId = useRef(0)
   const { phase, role, text, intensity, busy, submit, arrive, reset } = useConversationStage()
   const started = !(role === 'idle' && phase === 'idle')
+
+  const liquidSupported = useLiquidGlassSupport()
 
   const appRef = useRef<HTMLDivElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
@@ -89,6 +93,8 @@ function App() {
         onNewChat={handleNewChat}
         started={started}
         disabled={busy}
+        liquid={liquidSupported}
+        glass={GLASS_DEFAULTS}
       />
     </div>
   )
