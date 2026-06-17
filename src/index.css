@@ -91,6 +91,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   overflow: hidden;
   background:
     radial-gradient(130% 95% at 50% 18%, var(--bg) 0%, var(--bg-deep) 100%);
+  /* Smoothly lifts the whole page above the mobile keyboard (see
+     useViewportKeyboard, which sets transform: translateY). */
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
 /* ============================================================
@@ -190,7 +194,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   max-width: 20em;
   margin: 0 auto;
   max-height: 66vh;
-  overflow-y: auto;
+  /* Locked by default so a message that fits can't rubber-band; StageText flips
+     this to `auto` only when the content actually overflows. */
+  overflow-y: hidden;
   overscroll-behavior: contain;
   /* halo keeps every line legible over the moving light */
   text-shadow: 0 0 26px var(--halo), 0 0 10px var(--halo), 0 1px 2px var(--halo-soft);
@@ -199,6 +205,27 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
 .stage-text.markdown strong { font-weight: 600; }
 .stage-text.markdown em { font-style: italic; }
 .stage-text p + p { margin-top: 0.9em; }
+
+/* When the message overflows its bounds it scrolls; the edges fade so the
+   reader can tell there's more above/below. Fade depth tracks scroll position
+   (set as CSS vars by StageText), so it grows in only where there's more. */
+.stage-text.is-scrollable {
+  overflow-y: auto;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top, 0px),
+    #000 calc(100% - var(--fade-bottom, 0px)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top, 0px),
+    #000 calc(100% - var(--fade-bottom, 0px)),
+    transparent 100%
+  );
+}
 
 /* ============================================================
    Dock — the input
@@ -215,6 +242,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   align-items: center;
   gap: 12px;
   padding: 14px 18px calc(22px + env(safe-area-inset-bottom));
+  margin-bottom: 1em;
 }
 
 .dock-new {

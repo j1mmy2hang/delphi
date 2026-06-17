@@ -27,19 +27,24 @@ function App() {
   const { phase, role, text, intensity, busy, submit, arrive, reset } = useConversationStage()
   const started = !(role === 'idle' && phase === 'idle')
 
+  const appRef = useRef<HTMLDivElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useViewportKeyboard(started, textareaRef, dockRef)
+  useViewportKeyboard(started, textareaRef, appRef)
 
   const handleSend = () => {
     const trimmed = input.trim()
     if (!trimmed || busy) return
     setInput('')
 
-    // Launch the words from the input's current position up to the centre.
+    // Launch the words from the input up to the centre. The overlay animates in
+    // the app's layout space; if the keyboard has lifted the app, add the overlap
+    // back so the origin maps to the input's true (resting) position.
     const rect = textareaRef.current?.getBoundingClientRect()
+    const vv = window.visualViewport
+    const overlap = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0
     const startY = rect
-      ? rect.top + rect.height / 2 - window.innerHeight * STAGE_CENTER
+      ? rect.top + rect.height / 2 + overlap - window.innerHeight * STAGE_CENTER
       : window.innerHeight * 0.4
     setFlight({ id: ++flightId.current, text: trimmed, startY, scale: START_SCALE })
     submit(trimmed)
@@ -57,7 +62,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <PrismaticBurst intensity={intensity} />
       <div className="stage-scrim" aria-hidden="true" />
 

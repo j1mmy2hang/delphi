@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { renderParagraphs } from '../utils/markdown'
 import { EASE_SETTLE, STAGE } from '../constants'
 
 /**
@@ -15,14 +16,13 @@ interface Props {
 
 export const AscendingMessage = ({ text, startY, startScale, onArrived }: Props) => (
   <div className="stage-wrap ascend-wrap" aria-hidden="true">
-    <motion.p
+    <motion.div
       className="stage-text"
       initial={{ y: startY, scale: startScale, opacity: 0.4, filter: 'blur(1.5px)' }}
       animate={{ y: 0, scale: 1, opacity: 1, filter: 'blur(0px)' }}
       transition={{ duration: STAGE.RISE, ease: EASE_SETTLE }}
       onAnimationComplete={onArrived}
-    >
-      {text}
-    </motion.p>
+      dangerouslySetInnerHTML={{ __html: renderParagraphs(text) }}
+    />
   </div>
 )

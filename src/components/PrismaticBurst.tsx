@@ -234,13 +234,24 @@ export const PrismaticBurst = ({
     let bright = mapBright(targetRef.current)
     let dist = mapDistort(targetRef.current, distort)
 
+    // A soft glow gains nothing from 120 Hz; cap the work at ~60 fps so ProMotion
+    // and other high-refresh displays don't render (and burn) at double the rate.
+    // The 1 ms tolerance keeps plain 60 Hz screens rendering every frame. Easing
+    // and time still integrate over the real elapsed dt, so motion is unchanged.
+    const MIN_FRAME_MS = 1000 / 60 - 1
+
     const update = (now: number) => {
-      const dt = Math.min(Math.max(0, now - last) * 0.001, 0.05)
-      last = now
+      raf = requestAnimationFrame(update)
       if (document.hidden) {
-        raf = requestAnimationFrame(update)
+        last = now
         return
       }
+      const elapsed = now - last
+      if (elapsed < MIN_FRAME_MS) return
+
+      const dt = Math.min(elapsed * 0.001, 0.05)
+      last = now
+
       // Ease speed, brightness AND distortion toward the phase target so every
       // stage looks distinct; integrate time so speed changes never jump.
       const k = Math.min(dt * 2.0, 1)
@@ -253,7 +264,6 @@ export const PrismaticBurst = ({
       program.uniforms.uIntensity.value = bright
       program.uniforms.uDistort.value = dist
       renderer.render({ scene: mesh })
-      raf = requestAnimationFrame(update)
     }
     raf = requestAnimationFrame(update)
 

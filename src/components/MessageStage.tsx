@@ -6,7 +6,8 @@ import {
   useMotionValue,
   type AnimationPlaybackControls,
 } from 'framer-motion'
-import { renderBasicMarkdown, stripAngleTags } from '../utils/markdown'
+import { renderParagraphs, stripAngleTags } from '../utils/markdown'
+import { StageText } from './StageText'
 import { EASE, EASE_SETTLE, STAGE } from '../constants'
 
 export type Phase =
@@ -117,12 +118,9 @@ export const MessageStage = ({ role, text, phase }: Props) => {
             <p className="stage-subtitle">Think Deeper, Clearer, Better</p>
           </div>
         ) : role === 'user' ? (
-          <p className="stage-text">{text}</p>
+          <StageText html={renderParagraphs(text)} />
         ) : (
-          <div
-            className="stage-text markdown"
-            dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(stripAngleTags(text)) }}
-          />
+          <StageText className="markdown" html={renderParagraphs(stripAngleTags(text), true)} />
         )}
       </motion.div>
     </>
