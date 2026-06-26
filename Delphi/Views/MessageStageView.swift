@@ -7,26 +7,28 @@ struct StageMessage: View {
     let role: ConversationModel.Speaker
     let text: String
     let maxHeight: CGFloat
+    /// 1× on iPhone; larger on iPad so the serif reads proportionally.
+    var typeScale: CGFloat = 1
 
     var body: some View {
         content
-            .font(Typeface.serif(25))
+            .font(Typeface.serif(25 * typeScale))
             .tracking(0.2)
-            .lineSpacing(7)
+            .lineSpacing(7 * typeScale)
             .multilineTextAlignment(.center)
             .foregroundStyle(Color.stageText)
-            .frame(maxWidth: 560)
+            .frame(maxWidth: min(560 * typeScale, 680))
     }
 
     @ViewBuilder private var content: some View {
         switch role {
         case .idle:
-            VStack(spacing: 16) {
+            VStack(spacing: 16 * typeScale) {
                 Text("Delphi")
-                    .font(Typeface.serif(56))
+                    .font(Typeface.serif(56 * typeScale))
                     .tracking(1.5)
                 Text("Think Deeper, Clearer, Better")
-                    .font(Typeface.serif(19))
+                    .font(Typeface.serif(19 * typeScale))
                     .tracking(0.4)
                     .foregroundStyle(Color.stageSecondary)
             }
@@ -40,7 +42,7 @@ struct StageMessage: View {
     private func paragraphs(of source: String, markdown: Bool) -> some View {
         let blocks = Stage.paragraphs(source)
         return StageScroll(maxHeight: maxHeight) {
-            VStack(spacing: 14) {
+            VStack(spacing: 14 * typeScale) {
                 ForEach(blocks.indices, id: \.self) { i in
                     Text(Stage.inline(blocks[i], markdown: markdown))
                 }
@@ -91,6 +93,7 @@ struct StageScroll<Content: View>: View {
 struct MessageStageView: View {
     let model: ConversationModel
     let maxHeight: CGFloat
+    var typeScale: CGFloat = 1
 
     // REST = (1, 0, 0, 1); ENTER and EXIT are the cloud states.
     @State private var opacity: Double = 0
@@ -99,7 +102,7 @@ struct MessageStageView: View {
     @State private var scale: Double = 0.9
 
     var body: some View {
-        StageMessage(role: model.role, text: model.text, maxHeight: maxHeight)
+        StageMessage(role: model.role, text: model.text, maxHeight: maxHeight, typeScale: typeScale)
             .stageHalo()
             .scaleEffect(scale)
             .offset(y: yOffset)

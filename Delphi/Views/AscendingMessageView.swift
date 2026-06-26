@@ -9,6 +9,7 @@ struct AscendingMessageView: View {
     /// Distance from the resting centre down to the input, in points.
     let startY: CGFloat
     let maxHeight: CGFloat
+    var typeScale: CGFloat = 1
     let onArrived: () -> Void
 
     @State private var arrived = false
@@ -18,7 +19,7 @@ struct AscendingMessageView: View {
     private let startScale = 0.62
 
     var body: some View {
-        StageMessage(role: .user, text: text, maxHeight: maxHeight)
+        StageMessage(role: .user, text: text, maxHeight: maxHeight, typeScale: typeScale)
             .stageHalo()
             .scaleEffect(arrived ? 1 : startScale)
             .offset(y: arrived ? 0 : startY)

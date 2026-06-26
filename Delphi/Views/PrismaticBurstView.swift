@@ -7,14 +7,22 @@ import simd
 /// reads at a glance: calm → build → peak → ease → calm.
 ///
 /// This is the native counterpart of the web app's WebGL canvas: Metal is to
-/// iOS what WebGL was to the browser. Rendering is capped at 60fps and runs at
-/// a fraction of native resolution — the burst is soft, so the upscale is
-/// invisible while the GPU does a fraction of the work.
+/// iOS what WebGL was to the browser. The shader is a heavy per-pixel ray-march
+/// and the app is entirely GPU-bound (the CPU just encodes one draw call a
+/// frame), so power is managed on the GPU side: it renders at 0.6× resolution
+/// (the burst is soft, so the upscale is invisible) and is capped well below the
+/// display refresh — 30fps while the choreography moves, 20fps when calm or
+/// while the keyboard is up (never 60, never ProMotion's 120). Plus a thermal
+/// backoff that halves the rate again under sustained heat. This keeps the GPU
+/// from pinning (heat) and the main thread free for responsive typing.
 struct PrismaticBurstView: UIViewRepresentable {
     /// Conversation energy, 0 (calm) … 1 (churning).
     var intensity: Double
     /// Pause the render loop when the app isn't active.
     var active: Bool = true
+    /// Throttle to 30fps regardless of energy — e.g. while the keyboard is up,
+    /// so text input stays snappy instead of fighting the GPU for the main thread.
+    var lowPower: Bool = false
 
     func makeCoordinator() -> Renderer { Renderer() }
 
@@ -25,11 +33,11 @@ struct PrismaticBurstView: UIViewRepresentable {
         view.framebufferOnly = true
         view.isOpaque = true
         view.backgroundColor = .black
-        view.preferredFramesPerSecond = 60
+        view.preferredFramesPerSecond = 30
         view.autoResizeDrawable = false
         view.enableSetNeedsDisplay = false
         view.isPaused = false
-        view.renderScale = 0.66
+        view.renderScale = 0.6
         context.coordinator.configure()
         return view
     }
@@ -37,12 +45,27 @@ struct PrismaticBurstView: UIViewRepresentable {
     func updateUIView(_ view: BurstMTKView, context: Context) {
         context.coordinator.targetIntensity = Float(intensity)
         view.isPaused = !active
+        view.preferredFramesPerSecond = Self.frameRate(intensity: intensity, lowPower: lowPower)
+    }
+
+    /// The burst is a soft ambient glow, so it's capped well below the display
+    /// refresh — never ProMotion's 120, never even 60: 30fps while the
+    /// choreography is actually moving, 20fps when calm or while typing. This
+    /// roughly halves the GPU's sustained power versus a 60fps cap. The
+    /// foreground text choreography is CoreAnimation-driven and stays smooth at
+    /// the display's native rate regardless, so only the background glow is
+    /// throttled. (30 and 20 divide both 60Hz and 120Hz panels cleanly.) Real
+    /// elapsed time is integrated, so a lower frame rate slows nothing down — it
+    /// only spends less power.
+    static func frameRate(intensity: Double, lowPower: Bool) -> Int {
+        if lowPower { return 20 }
+        return intensity >= 0.4 ? 30 : 20
     }
 
     // MARK: - MTKView subclass that renders below native resolution
 
     final class BurstMTKView: MTKView {
-        var renderScale: CGFloat = 0.66
+        var renderScale: CGFloat = 0.6
         override func layoutSubviews() {
             super.layoutSubviews()
             let scale = contentScaleFactor > 0 ? contentScaleFactor : 2
@@ -76,6 +99,7 @@ struct PrismaticBurstView: UIViewRepresentable {
         private var dist: Float = 0
         private var lastTime: CFTimeInterval = 0
         private var primed = false
+        private var thermalSkip = false
 
         func configure() {
             guard pipeline == nil, let library = device.makeDefaultLibrary() else { return }
@@ -93,6 +117,16 @@ struct PrismaticBurstView: UIViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
         func draw(in view: MTKView) {
+            // Back off automatically as the device warms: under thermal
+            // pressure, render every other frame (halving the GPU load).
+            switch ProcessInfo.processInfo.thermalState {
+            case .serious, .critical:
+                thermalSkip.toggle()
+                if thermalSkip { return }
+            default:
+                thermalSkip = false
+            }
+
             guard let pipeline,
                   let colorBuffer,
                   let drawable = view.currentDrawable,

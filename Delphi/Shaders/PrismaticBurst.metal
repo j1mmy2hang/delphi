@@ -1,6 +1,11 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// Ray-march iteration count — the dominant per-pixel cost knob. The far steps
+// are attenuated to ~zero by smoothstep(5,0,rad) and edgeFade, so trimming from
+// the original 44 is nearly invisible but meaningfully cheaper.
+#define MARCH_STEPS 40
+
 // =============================================================================
 // Prismatic ray-march burst — Metal port of the web app's GLSL fragment shader
 // (after ReactBits' PrismaticBurst). The web canvas was screen-blended over a
@@ -125,7 +130,7 @@ fragment float4 burst_fragment(float4 fragCoord [[position]],
     float3 ang = float3(t * 0.31, t * 0.21, t * 0.17);
     float3x3 rot3dMat = rotZ(ang.z) * rotY(ang.y) * rotX(ang.x);
 
-    for (int i = 0; i < 44; ++i) {
+    for (int i = 0; i < MARCH_STEPS; ++i) {
         float3 P = marchT * dir;
         P.z -= 2.0;
         float rad = length(P);
