@@ -16,10 +16,20 @@ items marked **[code]** are things I still need to build in the app.
 - iOS **limit reminder window** (free/paid variants) + dev preview via `TEST_ADMIN`.
 - Hosted **Privacy Policy, Terms of Use, Support** pages.
 
-**Still to build [code]** (next coding sessions)
-- First-launch **Terms acceptance** gate.
-- **Report** action on a reply (email-based).
-- **StoreKit** subscription: the actual $1.99/mo purchase + restore + set `isPaid`.
+**Also done [code]**
+- First-launch **Terms acceptance** gate (`TermsGateView`).
+- **Report** action on a reply — native menu → pre-filled email (`reportCurrentReply`).
+- **StoreKit** subscription (`SubscriptionStore`): loads the product, purchases, restores,
+  and flips `isPaid` → sends `X-Tier: paid`. Purchase is triggered from the limit alert's
+  "Unlock more usage". Still needs the product created in App Store Connect (§3c) and sandbox
+  testing.
+
+**To verify in Xcode**
+- StoreKit local test: select **`Delphi.storekit`** in the scheme (Product → Scheme → Edit
+  Scheme → Run → Options → StoreKit Configuration → Delphi.storekit). Then the upgrade button
+  shows Apple's purchase sheet without needing App Store Connect. If Xcode can't open the file,
+  recreate it via File → New → File → StoreKit Configuration File with product id
+  `com.jimmyzhang.delphi.plus.monthly`, $1.99, 1 month.
 
 ---
 

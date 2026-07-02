@@ -190,10 +190,6 @@ final class ConversationModel {
 
     func dismissLimit() { limitNotice = nil }
 
-    /// Begin the upgrade purchase. TODO: present the StoreKit sheet; on a verified
-    /// purchase set `isPaid = true`. For now it just closes the window.
-    func startUpgrade() { limitNotice = nil }
-
     /// Start of next calendar month — the fake reset instant for previews.
     private static func startOfNextMonth() -> Date {
         let cal = Calendar.current

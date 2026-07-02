@@ -1,0 +1,55 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "DELPHI01",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21F3A9C1",
+      "localizations" : [],
+      "name" : "Delphi Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "1.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5E7B2D10",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "A larger monthly allowance.",
+              "displayName" : "Delphi Plus",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jimmyzhang.delphi.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Delphi Plus Monthly",
+          "subscriptionGroupID" : "21F3A9C1",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

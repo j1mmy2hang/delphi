@@ -4,10 +4,16 @@ import SwiftUI
 /// message, the ascending hand-off, and the Liquid Glass input dock.
 struct ContentView: View {
     @State private var model = ConversationModel()
+    @State private var store = SubscriptionStore()
     @State private var input = ""
     @State private var flight: Flight?
     @FocusState private var focused: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @AppStorage("delphi.acceptedTermsVersion") private var acceptedTermsVersion = 0
+
+    /// Bump when the Terms/Privacy change to re-prompt acceptance.
+    private static let currentTermsVersion = 1
 
     /// The words in mid-ascent from the input to the centre.
     private struct Flight: Identifiable {
@@ -82,20 +88,32 @@ struct ContentView: View {
                         focused = false
                     })
             }
-            .overlay {
-                if let notice = model.limitNotice {
-                    LimitReminderView(
-                        notice: notice,
-                        onUpgrade: { model.startUpgrade() },
-                        onDismiss: { model.dismissLimit() })
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            // Report affordance — a native menu, shown once a reply has settled.
+            .overlay(alignment: .topTrailing) {
+                if model.role == .assistant, model.phase == .settled {
+                    Menu {
+                        Button(role: .destructive) {
+                            reportCurrentReply()
+                        } label: {
+                            Label("Report response", systemImage: "flag")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.stageSecondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .padding(.trailing, 4)
                 }
             }
-            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: model.limitNotice)
         }
         .background(Color.black)
         .preferredColorScheme(.dark)
-        .onAppear { Haptics.shared.prepare() }
+        .onAppear {
+            Haptics.shared.prepare()
+            model.isPaid = store.isSubscribed
+        }
         // A soft touch when the bar is tapped into.
         .onChange(of: focused) { _, isFocused in
             if isFocused { Haptics.shared.tap() }
@@ -113,6 +131,73 @@ struct ContentView: View {
                 focused = false
                 Haptics.shared.tap()
             }
+        }
+        // Keep the tier in sync with the live subscription state.
+        .onChange(of: store.isSubscribed) { _, subscribed in
+            model.isPaid = subscribed
+        }
+        // Native limit window.
+        .alert(limitTitle, isPresented: limitPresented) {
+            if model.limitNotice?.isPaid == true {
+                Button("OK", role: .cancel) { model.dismissLimit() }
+            } else {
+                Button("Unlock more usage") { purchaseUpgrade() }
+                Button("Not now", role: .cancel) { model.dismissLimit() }
+            }
+        } message: {
+            Text(limitMessage)
+        }
+        // First-launch terms acceptance (required for AI apps).
+        .fullScreenCover(isPresented: needsTerms) {
+            TermsGateView { acceptedTermsVersion = Self.currentTermsVersion }
+        }
+    }
+
+    // MARK: - Limit window
+
+    private var limitPresented: Binding<Bool> {
+        Binding(get: { model.limitNotice != nil }, set: { if !$0 { model.dismissLimit() } })
+    }
+
+    private var limitTitle: String {
+        (model.limitNotice?.isPaid ?? false) ? "You've reached your limit" : "You've reached your free limit"
+    }
+
+    private var limitMessage: String {
+        guard let notice = model.limitNotice else { return "" }
+        let opener = notice.isPaid
+            ? "You've used all your access for now."
+            : "You've used all your free thinking for now."
+        guard let reset = notice.resetAt else { return opener + " Please try again later." }
+        let date = reset.formatted(.dateTime.month(.wide).day())
+        return notice.isPaid
+            ? "\(opener) It resets on \(date)."
+            : "\(opener) It resets on \(date), or unlock more usage to keep going."
+    }
+
+    private func purchaseUpgrade() {
+        Task {
+            _ = await store.purchase()
+            model.isPaid = store.isSubscribed
+        }
+    }
+
+    // MARK: - Terms & reporting
+
+    private var needsTerms: Binding<Bool> {
+        Binding(get: { acceptedTermsVersion < Self.currentTermsVersion }, set: { _ in })
+    }
+
+    /// Opens a pre-filled email to report the currently shown reply.
+    private func reportCurrentReply() {
+        let snippet = String(model.text.prefix(1500))
+        let subject = "Delphi — report a response"
+        let body = "I'd like to report this AI response:\n\n\"\(snippet)\"\n\nWhat's wrong with it?\n"
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let query = "?subject=\(subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
+            + "&body=\(body.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
+        if let url = URL(string: "mailto:contact@jimmyzhang.org\(query)") {
+            openURL(url)
         }
     }
 
