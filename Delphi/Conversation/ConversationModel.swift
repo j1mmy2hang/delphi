@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import NaturalLanguage
 
 /// One message on screen at a time, choreographed for continuity:
 ///   submit  → whatever is on screen melts into the wave while the typed words
@@ -24,6 +25,10 @@ final class ConversationModel {
         static let form = 1.25      // the reply forms out of the cloud
         static let minThink = 0.9   // min dwell before the question dissolves
     }
+
+    /// Silent regeneration attempts if the reply's language still doesn't
+    /// match the user's after the initial steering hint.
+    private static let maxLanguageRetries = 2
 
     // The living stage trio the view renders.
     private(set) var phase: Phase = .idle
@@ -76,11 +81,12 @@ final class ConversationModel {
         messages.append(Message(role: .user, content: trimmed))
         isStreaming = true
         let history = messages
+        let expectedLanguages = LanguageGuard.expectedLanguages(for: trimmed)
         streamTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let reply: String
             do {
-                reply = try await service.reply(to: history)
+                reply = try await self.requestReply(history: history, expectedLanguages: expectedLanguages)
             } catch {
                 reply = "抱歉，出了点问题。请重新开始对话。"
             }
@@ -90,6 +96,32 @@ final class ConversationModel {
             isStreaming = false
             maybeReveal()
         }
+    }
+
+    /// Requests a reply, steering it toward the language of the user's latest
+    /// message and, if the model drifts anyway, silently retrying with a
+    /// stronger nudge. The hint is only ever added to the outgoing copy of
+    /// history — `messages` (what's shown on screen) keeps the user's text
+    /// exactly as typed.
+    private func requestReply(history: [Message], expectedLanguages: Set<NLLanguage>?) async throws -> String {
+        guard let expectedLanguages, let lastIndex = history.indices.last else {
+            return try await service.reply(to: history)
+        }
+        let languageName = LanguageGuard.names(for: expectedLanguages)
+        let originalContent = history[lastIndex].content
+        var wire = history
+
+        wire[lastIndex].content = originalContent + "\n\n[Reply only in \(languageName).]"
+        var reply = try await service.reply(to: wire)
+
+        var attempt = 0
+        while !LanguageGuard.matches(reply: reply, expected: expectedLanguages), attempt < Self.maxLanguageRetries {
+            attempt += 1
+            wire[lastIndex].content = originalContent +
+                "\n\n[IMPORTANT: your previous reply was not in \(languageName). Reply only in \(languageName) this time.]"
+            reply = try await service.reply(to: wire)
+        }
+        return reply
     }
 
     /// Called by the ascending overlay when the words reach the centre.

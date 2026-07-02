@@ -101,7 +101,7 @@ struct ContentView: View {
     private func send(viewportHeight: CGFloat) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !model.busy else { return }
-        Haptics.shared.send()
+        Haptics.shared.send(duration: ConversationModel.Choreo.rise)
         input = ""
         focused = false
         // Launch the words from the input up to the centre. 0.40·height matches

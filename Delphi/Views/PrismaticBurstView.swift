@@ -12,9 +12,11 @@ import simd
 /// frame), so power is managed on the GPU side: it renders at 0.6× resolution
 /// (the burst is soft, so the upscale is invisible) and is capped well below the
 /// display refresh — 30fps while the choreography moves, 20fps when calm or
-/// while the keyboard is up (never 60, never ProMotion's 120). Plus a thermal
-/// backoff that halves the rate again under sustained heat. This keeps the GPU
-/// from pinning (heat) and the main thread free for responsive typing.
+/// while the keyboard is up (never 60, never ProMotion's 120), dropping to
+/// 10fps after several seconds sitting at the calm baseline with nothing
+/// changing on screen. Plus a thermal backoff that halves the rate again under
+/// sustained heat. This keeps the GPU from pinning (heat) and the main thread
+/// free for responsive typing.
 struct PrismaticBurstView: UIViewRepresentable {
     /// Conversation energy, 0 (calm) … 1 (churning).
     var intensity: Double
@@ -101,6 +103,14 @@ struct PrismaticBurstView: UIViewRepresentable {
         private var primed = false
         private var thermalSkip = false
 
+        // After a long stretch sitting at the calm baseline (nothing on screen
+        // is changing — the user is just reading), drop further still. Any
+        // rise in intensity re-triggers `updateUIView`, which resets the rate
+        // via `frameRate(intensity:lowPower:)`, so this self-heals.
+        private var idleSince: CFTimeInterval?
+        private static let idleThreshold: CFTimeInterval = 6.0
+        private static let deepIdleFPS = 10
+
         func configure() {
             guard pipeline == nil, let library = device.makeDefaultLibrary() else { return }
             let desc = MTLRenderPipelineDescriptor()
@@ -138,6 +148,16 @@ struct PrismaticBurstView: UIViewRepresentable {
             let now = CACurrentMediaTime()
             let dt = lastTime == 0 ? 1.0 / 60.0 : min(now - lastTime, 0.05)
             lastTime = now
+
+            if targetIntensity <= 0.06 {
+                if idleSince == nil { idleSince = now }
+                if let idleSince, now - idleSince > Self.idleThreshold,
+                   view.preferredFramesPerSecond != Self.deepIdleFPS {
+                    view.preferredFramesPerSecond = Self.deepIdleFPS
+                }
+            } else {
+                idleSince = nil
+            }
 
             // Snap on the first frame, then ease so phase changes glide.
             if !primed {
