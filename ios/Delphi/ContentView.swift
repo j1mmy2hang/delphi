@@ -110,12 +110,13 @@ struct ContentView: View {
                             Label("Unlock more usage", systemImage: "sparkles")
                         }
                     }
-                    Button {
-                        restorePurchases()
-                    } label: {
-                        Label("Restore Purchases", systemImage: "arrow.clockwise")
+                    if store.product != nil {
+                        Button {
+                            restorePurchases()
+                        } label: {
+                            Label("Restore Purchases", systemImage: "arrow.clockwise")
+                        }
                     }
-                    Divider()
                     Button {
                         openURL(Self.termsURL)
                     } label: {
