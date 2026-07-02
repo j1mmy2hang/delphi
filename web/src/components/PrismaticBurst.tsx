@@ -6,6 +6,9 @@ import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl'
  * thinking surface. The animation SPEED is eased from `intensity` and folded
  * into the shader clock so phase changes glide rather than jump:
  *   uTime += dt * easedSpeed   (uSpeed stays 1)
+ *
+ * Derived from react-bits' PrismaticBurst © 2026 David Haz (MIT + Commons
+ * Clause). See ACKNOWLEDGMENTS.md.
  */
 
 const vertexShader = `#version 300 es

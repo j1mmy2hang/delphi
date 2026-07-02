@@ -1,6 +1,13 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// -----------------------------------------------------------------------------
+// Attribution: this prismatic burst is a Metal port derived from ReactBits'
+// "PrismaticBurst" background — react-bits © 2026 David Haz, licensed MIT +
+// Commons Clause License Condition v1.0. Using it to build this app is permitted;
+// the components themselves are not resold. Full notice: ACKNOWLEDGMENTS.md.
+// -----------------------------------------------------------------------------
+
 // Ray-march iteration count — the dominant per-pixel cost knob. The far steps
 // are attenuated to ~zero by smoothstep(5,0,rad) and edgeFade, so trimming from
 // the original 44 is nearly invisible but meaningfully cheaper.
