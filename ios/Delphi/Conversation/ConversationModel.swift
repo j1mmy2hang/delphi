@@ -36,6 +36,20 @@ final class ConversationModel {
     private(set) var text: String = ""
     private(set) var isStreaming = false
 
+    /// Non-nil while the "you've reached your limit" window is showing.
+    private(set) var limitNotice: LimitNotice?
+
+    /// Whether this user currently has the paid subscription. Drives the X-Tier
+    /// header sent to the backend and which reminder variant appears.
+    /// TODO: wire to StoreKit (set true when an active subscription is verified).
+    var isPaid = false
+
+    /// What the limit window needs to render (captured when the limit fires).
+    struct LimitNotice: Equatable {
+        let resetAt: Date?
+        let isPaid: Bool
+    }
+
     // Conversation energy per phase (0 calm … 1 churning).
     var intensity: Double {
         switch phase {
@@ -87,6 +101,10 @@ final class ConversationModel {
             let reply: String
             do {
                 reply = try await self.requestReply(history: history, expectedLanguages: expectedLanguages)
+            } catch ChatError.limitReached(let resetAt) {
+                if Task.isCancelled { return }
+                self.handleLimit(resetAt: resetAt)
+                return
             } catch {
                 reply = "抱歉，出了点问题。请重新开始对话。"
             }
@@ -105,27 +123,28 @@ final class ConversationModel {
     /// exactly as typed.
     private func requestReply(history: [Message], expectedLanguages: Set<NLLanguage>?) async throws -> String {
         guard let expectedLanguages, let lastIndex = history.indices.last else {
-            return try await service.reply(to: history)
+            return try await service.reply(to: history, paid: isPaid)
         }
         let languageName = LanguageGuard.names(for: expectedLanguages)
         let originalContent = history[lastIndex].content
         var wire = history
 
         wire[lastIndex].content = originalContent + "\n\n[Reply only in \(languageName).]"
-        var reply = try await service.reply(to: wire)
+        var reply = try await service.reply(to: wire, paid: isPaid)
 
         var attempt = 0
         while !LanguageGuard.matches(reply: reply, expected: expectedLanguages), attempt < Self.maxLanguageRetries {
             attempt += 1
             wire[lastIndex].content = originalContent +
                 "\n\n[IMPORTANT: your previous reply was not in \(languageName). Reply only in \(languageName) this time.]"
-            reply = try await service.reply(to: wire)
+            reply = try await service.reply(to: wire, paid: isPaid)
         }
         return reply
     }
 
     /// Called by the ascending overlay when the words reach the centre.
     func arrive() {
+        guard limitNotice == nil else { return }  // a limit interrupted the turn
         restStart = Date()
         set(.thinking, .user, userText)
         maybeReveal()
@@ -144,6 +163,43 @@ final class ConversationModel {
             guard let self, !Task.isCancelled else { return }
             set(.idle, .idle, "")
         }
+    }
+
+    // MARK: - Usage limit
+
+    /// A real 429 from the backend: roll the in-flight turn back so history stays
+    /// clean for a later retry, calm the stage, and raise the limit window.
+    private func handleLimit(resetAt: Double?) {
+        cancelAll()
+        if messages.last?.role == .user { messages.removeLast() }
+        isStreaming = false
+        revealing = false
+        pendingReply = nil
+        set(.idle, .idle, "")
+        let date = resetAt.map { Date(timeIntervalSince1970: $0) }
+        limitNotice = LimitNotice(resetAt: date, isPaid: isPaid)
+    }
+
+    /// Wired to the TEST_ADMIN chat codes (DEBUG only, see ContentView) so the
+    /// window can be previewed on device without exhausting the real budget.
+    func fireTestLimit(paid: Bool) {
+        cancelAll()
+        isStreaming = false
+        limitNotice = LimitNotice(resetAt: Self.startOfNextMonth(), isPaid: paid)
+    }
+
+    func dismissLimit() { limitNotice = nil }
+
+    /// Begin the upgrade purchase. TODO: present the StoreKit sheet; on a verified
+    /// purchase set `isPaid = true`. For now it just closes the window.
+    func startUpgrade() { limitNotice = nil }
+
+    /// Start of next calendar month — the fake reset instant for previews.
+    private static func startOfNextMonth() -> Date {
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.year, .month], from: Date())
+        let startOfThisMonth = cal.date(from: comps) ?? Date()
+        return cal.date(byAdding: .month, value: 1, to: startOfThisMonth) ?? Date()
     }
 
     // MARK: - Reveal

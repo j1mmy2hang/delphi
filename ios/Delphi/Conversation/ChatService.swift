@@ -6,6 +6,16 @@ import Foundation
 ///
 /// Point `endpoint` at your deployment. The default is the project's Netlify
 /// site; change `Endpoint.base` (or the whole URL) to your own.
+
+/// Typed failures the conversation layer cares about.
+enum ChatError: Error {
+    /// The monthly budget for this device's tier is used up. `resetAt` is the
+    /// epoch-seconds instant the allowance refills (start of next month).
+    case limitReached(resetAt: Double?)
+    /// Short-term burst limit — the user is going too fast.
+    case rateLimited
+}
+
 struct ChatService {
     enum Endpoint {
         /// Your deployed site. Override here to point at a different backend.
@@ -24,11 +34,13 @@ struct ChatService {
     /// Streams a reply for the given history and returns the full text once the
     /// stream completes. The stage reveals replies whole (like the web app), so
     /// we accumulate rather than surface partial tokens.
-    func reply(to history: [Message]) async throws -> String {
+    func reply(to history: [Message], paid: Bool = false) async throws -> String {
         var request = URLRequest(url: Endpoint.chat)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.appToken, forHTTPHeaderField: "X-App-Token")
+        request.setValue(DeviceIdentity.current, forHTTPHeaderField: "X-Device-Id")
+        if paid { request.setValue("paid", forHTTPHeaderField: "X-Tier") }
         request.httpBody = try JSONEncoder().encode(ChatRequest(messages: history))
 
         let (bytes, response): (URLSession.AsyncBytes, URLResponse)
@@ -44,7 +56,26 @@ struct ChatService {
             #endif
         }
 
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
+            #if DEBUG
+            return try await Self.simulatedReply()
+            #else
+            throw URLError(.badServerResponse)
+            #endif
+        }
+
+        // Monthly budget reached — surface a typed error (in DEBUG and Release)
+        // so the app can show the limit reminder instead of a canned reply.
+        if http.statusCode == 429 {
+            let body = await Self.collectBody(bytes)
+            if let limit = try? JSONDecoder().decode(LimitBody.self, from: Data(body.utf8)),
+               limit.error == "limit" {
+                throw ChatError.limitReached(resetAt: limit.resetAt)
+            }
+            throw ChatError.rateLimited
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
             #if DEBUG
             return try await Self.simulatedReply()
             #else
@@ -78,6 +109,19 @@ struct ChatService {
             let delta: Delta
         }
         let choices: [Choice]
+    }
+
+    /// The backend's 429 limit payload: `{ "error": "limit", "resetAt": <epoch> }`.
+    private struct LimitBody: Decodable {
+        let error: String?
+        let resetAt: Double?
+    }
+
+    /// Drains a (small) error-response body to a string, swallowing read errors.
+    private static func collectBody(_ bytes: URLSession.AsyncBytes) async -> String {
+        var data = Data()
+        do { for try await byte in bytes { data.append(byte) } } catch {}
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     // MARK: - Offline preview

@@ -82,6 +82,16 @@ struct ContentView: View {
                         focused = false
                     })
             }
+            .overlay {
+                if let notice = model.limitNotice {
+                    LimitReminderView(
+                        notice: notice,
+                        onUpgrade: { model.startUpgrade() },
+                        onDismiss: { model.dismissLimit() })
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: model.limitNotice)
         }
         .background(Color.black)
         .preferredColorScheme(.dark)
@@ -96,11 +106,29 @@ struct ContentView: View {
                 Haptics.shared.answer(duration: ConversationModel.Choreo.form)
             }
         }
+        // A limit can interrupt a turn mid-ascent — clear the flying words.
+        .onChange(of: model.limitNotice) { _, notice in
+            if notice != nil {
+                flight = nil
+                focused = false
+                Haptics.shared.tap()
+            }
+        }
     }
 
     private func send(viewportHeight: CGFloat) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !model.busy else { return }
+        #if DEBUG
+        // Dev-only backdoor: preview the limit window without spending real
+        // budget. "TEST_ADMIN" → free variant, "TEST_ADMIN_PAID" → paid variant.
+        if trimmed == "TEST_ADMIN" || trimmed == "TEST_ADMIN_PAID" {
+            input = ""
+            focused = false
+            model.fireTestLimit(paid: trimmed == "TEST_ADMIN_PAID")
+            return
+        }
+        #endif
         Haptics.shared.send(duration: ConversationModel.Choreo.rise)
         input = ""
         focused = false
