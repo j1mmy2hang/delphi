@@ -12,6 +12,7 @@
   "author": "Jimmy Zhang",
   "license": "MIT",
   "dependencies": {
+    "@netlify/blobs": "^10.7.9",
     "@netlify/functions": "^5.1.5",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
