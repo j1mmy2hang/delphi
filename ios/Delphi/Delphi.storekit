@@ -39,7 +39,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.jimmyzhang.delphi.plus.monthly",
+          "productID" : "org.jimmyzhang.delphi.plus.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Delphi Plus Monthly",
           "subscriptionGroupID" : "21F3A9C1",

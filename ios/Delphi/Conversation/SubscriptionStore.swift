@@ -11,7 +11,7 @@ import Observation
 @MainActor
 @Observable
 final class SubscriptionStore {
-    static let productID = "com.jimmyzhang.delphi.plus.monthly"
+    static let productID = "org.jimmyzhang.delphi.plus.monthly"
 
     private(set) var product: Product?
     private(set) var isSubscribed = false

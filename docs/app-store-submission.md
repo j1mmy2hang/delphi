@@ -29,7 +29,7 @@ items marked **[code]** are things I still need to build in the app.
   Scheme → Run → Options → StoreKit Configuration → Delphi.storekit). Then the upgrade button
   shows Apple's purchase sheet without needing App Store Connect. If Xcode can't open the file,
   recreate it via File → New → File → StoreKit Configuration File with product id
-  `com.jimmyzhang.delphi.plus.monthly`, $1.99, 1 month.
+  `org.jimmyzhang.delphi.plus.monthly`, $1.99, 1 month.
 
 ---
 
@@ -73,7 +73,7 @@ Then Netlify keeps deploying via the redirect (or point it at the renamed repo o
 ### 3a. Create the app record
 - App Store Connect → **My Apps → + → New App**.
 - Platform iOS, Name **Delphi** (see trademark note below), Primary language English (U.S.),
-  Bundle ID **com.jimmyzhang.delphi**, SKU `delphi-ios`.
+  Bundle ID **org.jimmyzhang.delphi**, SKU `delphi-ios`.
 - ⚠️ **Trademark:** "Delphi" is a crowded name (Embarcadero's Delphi language, Delphi auto
   parts). The bundle ID is fine, but consider a more distinctive **display name** (e.g.
   "Delphi — Think Clearer") to reduce rejection/legal risk. You can change the display name
@@ -89,7 +89,7 @@ Then Netlify keeps deploying via the redirect (or point it at the renamed repo o
 - **Monetization → Subscriptions** → create a **Subscription Group** (e.g. "Delphi Plus").
 - Add an **auto-renewable subscription**:
   - Reference name: `Delphi Plus Monthly`
-  - Product ID: **`com.jimmyzhang.delphi.plus.monthly`** (I'll use this exact id in code)
+  - Product ID: **`org.jimmyzhang.delphi.plus.monthly`** (I'll use this exact id in code)
   - Duration: 1 month, Price: **US$1.99** (Apple sets regional equivalents).
   - Add a localized display name ("Delphi Plus"), description, and a review screenshot.
 - This is what my StoreKit code (next session) will purchase.

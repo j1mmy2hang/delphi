@@ -7,7 +7,7 @@ import Security
 /// and reinstall (which stops trivially resetting the free allowance). Not used
 /// for tracking or advertising.
 enum DeviceIdentity {
-    private static let service = "com.jimmyzhang.delphi.device"
+    private static let service = "org.jimmyzhang.delphi.device"
     private static let account = "device-id"
 
     /// The current id, generating and persisting one on first access.
