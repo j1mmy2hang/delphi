@@ -15,6 +15,9 @@ struct ContentView: View {
     /// Bump when the Terms/Privacy change to re-prompt acceptance.
     private static let currentTermsVersion = 1
 
+    private static let termsURL = URL(string: "https://delphi-web.netlify.app/terms.html")!
+    private static let privacyURL = URL(string: "https://delphi-web.netlify.app/privacy.html")!
+
     /// The words in mid-ascent from the input to the centre.
     private struct Flight: Identifiable {
         let id = UUID()
@@ -88,24 +91,49 @@ struct ContentView: View {
                         focused = false
                     })
             }
-            // Report affordance — a native menu, shown once a reply has settled.
+            // Persistent utilities menu (native). Keeps subscription, restore, and
+            // legal links reachable anytime — required for a subscription app —
+            // plus the report action once a reply has settled.
             .overlay(alignment: .topTrailing) {
-                if model.role == .assistant, model.phase == .settled {
-                    Menu {
+                Menu {
+                    if model.role == .assistant, model.phase == .settled {
                         Button(role: .destructive) {
                             reportCurrentReply()
                         } label: {
                             Label("Report response", systemImage: "flag")
                         }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.stageSecondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
                     }
-                    .padding(.trailing, 4)
+                    if !store.isSubscribed {
+                        Button {
+                            purchaseUpgrade()
+                        } label: {
+                            Label("Unlock more usage", systemImage: "sparkles")
+                        }
+                    }
+                    Button {
+                        restorePurchases()
+                    } label: {
+                        Label("Restore Purchases", systemImage: "arrow.clockwise")
+                    }
+                    Divider()
+                    Button {
+                        openURL(Self.termsURL)
+                    } label: {
+                        Label("Terms of Use", systemImage: "doc.text")
+                    }
+                    Button {
+                        openURL(Self.privacyURL)
+                    } label: {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.stageSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .padding(.trailing, 4)
             }
         }
         .background(Color.black)
@@ -178,6 +206,13 @@ struct ContentView: View {
     private func purchaseUpgrade() {
         Task {
             _ = await store.purchase()
+            model.isPaid = store.isSubscribed
+        }
+    }
+
+    private func restorePurchases() {
+        Task {
+            await store.restore()
             model.isPaid = store.isSubscribed
         }
     }
