@@ -9,8 +9,9 @@
 [functions]
   included_files = ["system-prompt.md"]
 
+# `netlify dev` runs this command from the repo root, so point it at web/ explicitly.
 [dev]
-  command = "npm run dev"
+  command = "npm --prefix web run dev"
   targetPort = 5173
   port = 8888
   autoLaunch = false
