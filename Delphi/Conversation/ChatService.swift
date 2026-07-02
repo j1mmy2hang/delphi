@@ -13,6 +13,14 @@ struct ChatService {
         static let chat = URL(string: "\(base)/.netlify/functions/chat")!
     }
 
+    /// Shared token that gates the backend. This is *obfuscation, not a hard
+    /// secret* — it ships in the binary and a determined attacker can extract
+    /// it — but it stops the common case: bots that scan for open AI proxies.
+    /// The real cost backstops are the server-side rate limit and the OpenRouter
+    /// spend cap. Must exactly match `APP_SHARED_TOKEN` in the Netlify env.
+    /// Rotate anytime by changing both values.
+    private static let appToken = "cCx6MQkSGsGtw3cBe_PHqIYZjeyUGwHbDxm-rbSEZLw"
+
     /// Streams a reply for the given history and returns the full text once the
     /// stream completes. The stage reveals replies whole (like the web app), so
     /// we accumulate rather than surface partial tokens.
@@ -20,6 +28,7 @@ struct ChatService {
         var request = URLRequest(url: Endpoint.chat)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.appToken, forHTTPHeaderField: "X-App-Token")
         request.httpBody = try JSONEncoder().encode(ChatRequest(messages: history))
 
         let (bytes, response): (URLSession.AsyncBytes, URLResponse)
