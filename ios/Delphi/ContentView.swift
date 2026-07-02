@@ -128,12 +128,14 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.stageSecondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.stageText)
+                        .frame(width: 40, height: 40)
+                        .liquidGlassCircle()
+                        .contentShape(Circle())
                 }
-                .padding(.trailing, 4)
+                .padding(.top, 6)
+                .padding(.trailing, 12)
             }
         }
         .background(Color.black)
@@ -264,5 +266,20 @@ struct ContentView: View {
     private static func typeScale(for size: CGSize) -> CGFloat {
         let shortEdge = min(size.width, size.height)
         return min(max(shortEdge / 390, 1.0), 1.3)
+    }
+}
+
+extension View {
+    /// A round native Liquid Glass button surface on iOS 26, degrading to a
+    /// translucent material on older systems so the project still builds/runs if
+    /// the deployment target is lowered. (Sibling of `liquidGlassField`.)
+    @ViewBuilder func liquidGlassCircle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            self
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.12)))
+        }
     }
 }
