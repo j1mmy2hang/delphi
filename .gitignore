@@ -1,26 +1,4 @@
-# Dependencies
-node_modules/
-.netlify/
-dist/
-
-# Environment Variables
-.env
-.env.*
-!.env.example
-
-# OS Files
+# Repo-wide junk. Each project keeps its own ignores (ios/.gitignore, web/.gitignore).
 .DS_Store
-._*
-Thumbs.db
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Tools
 .claude/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.log
