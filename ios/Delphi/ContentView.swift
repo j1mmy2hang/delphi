@@ -167,7 +167,7 @@ struct ContentView: View {
         guard let notice = model.limitNotice else { return "" }
         let opener = notice.isPaid
             ? "You've used all your access for now."
-            : "You've used all your free thinking for now."
+            : "You've used all your free messages for now."
         guard let reset = notice.resetAt else { return opener + " Please try again later." }
         let date = reset.formatted(.dateTime.month(.wide).day())
         return notice.isPaid
