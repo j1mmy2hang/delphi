@@ -18,15 +18,25 @@ struct TermsGateView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                VStack(spacing: 16) {
+                VStack(spacing: 18) {
                     Text("Delphi")
                         .font(Typeface.serif(52))
                         .tracking(1.2)
                         .foregroundStyle(Color.stageText)
 
-                    Text("Think Deeper, Clearer, Better")
-                        .font(Typeface.serif(19))
-                        .foregroundStyle(Color.stageSecondary)
+                    VStack(spacing: 28) {
+                        Text("Think Deeper, Clearer, Better")
+                            .font(Typeface.serif(19))
+                            .foregroundStyle(Color.stageSecondary)
+
+                        Text("Private by design — no account, no tracking. Your messages are sent to the AI (Claude, via OpenRouter) only to write a reply; they're never stored or read by us.")
+                            .font(.system(size: 13))
+                            .lineSpacing(3)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color.stageTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 10)
+                    }
                 }
 
                 Spacer()
