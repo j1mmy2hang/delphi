@@ -103,7 +103,7 @@ struct ContentView: View {
                             Label("Report response", systemImage: "flag")
                         }
                     }
-                    if !store.isSubscribed {
+                    if canUpgrade {
                         Button {
                             purchaseUpgrade()
                         } label: {
@@ -168,11 +168,11 @@ struct ContentView: View {
         }
         // Native limit window.
         .alert(limitTitle, isPresented: limitPresented) {
-            if model.limitNotice?.isPaid == true {
-                Button("OK", role: .cancel) { model.dismissLimit() }
-            } else {
+            if canUpgrade, model.limitNotice?.isPaid != true {
                 Button("Unlock more usage") { purchaseUpgrade() }
                 Button("Not now", role: .cancel) { model.dismissLimit() }
+            } else {
+                Button("OK", role: .cancel) { model.dismissLimit() }
             }
         } message: {
             Text(limitMessage)
@@ -184,6 +184,11 @@ struct ContentView: View {
     }
 
     // MARK: - Limit window
+
+    /// Only offer the upgrade when a real, purchasable product has loaded. Keeps
+    /// the UI clean when there's no product (e.g. a free-first release, or before
+    /// StoreKit finishes loading), so there's never a button that does nothing.
+    private var canUpgrade: Bool { !store.isSubscribed && store.product != nil }
 
     private var limitPresented: Binding<Bool> {
         Binding(get: { model.limitNotice != nil }, set: { if !$0 { model.dismissLimit() } })
@@ -200,9 +205,10 @@ struct ContentView: View {
             : "You've used all your free messages for now."
         guard let reset = notice.resetAt else { return opener + " Please try again later." }
         let date = reset.formatted(.dateTime.month(.wide).day())
-        return notice.isPaid
-            ? "\(opener) It resets on \(date)."
-            : "\(opener) It resets on \(date), or unlock more usage to keep going."
+        if !notice.isPaid, canUpgrade {
+            return "\(opener) It resets on \(date), or unlock more usage to keep going."
+        }
+        return "\(opener) It resets on \(date)."
     }
 
     private func purchaseUpgrade() {
