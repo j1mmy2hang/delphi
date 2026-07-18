@@ -3,36 +3,67 @@
    ============================================================ */
 
 :root {
-  /* The prismatic burst lives on a cinematic dark stage so its colours sing. */
-  color-scheme: dark;
+  color-scheme: light dark;
+
+  --content-width: 760px;
+
+  /* Bubble geometry — the avatar and loading state derive their size from these
+     so a single-line bubble, the δ avatar, and the typing indicator stay equal. */
+  --bubble-pad-y: 10px;
+  --bubble-pad-x: 15px;
+  --bubble-font: 16px;
+  --bubble-line: 1.6;
+  --bubble-1line: calc(2 * var(--bubble-pad-y) + var(--bubble-font) * var(--bubble-line));
 
   /* Type */
   --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
     'PingFang SC', 'Segoe UI', system-ui, sans-serif;
 
-  /* Deep, near-black indigo so the cool spectrum reads */
-  --bg: #0A0A12;
-  --bg-deep: #050509;
-  --text: #ECEAF4;
-  --text-secondary: #918FA6;
-  --text-tertiary: #5C5A74;
+  /* Light palette — warm paper */
+  --bg: #F7F5F0;
+  --text: #26262B;
+  --text-secondary: #8A887F;
+  --text-tertiary: #B6B3A9;
 
-  --accent: #6E5BD6;
-  --accent-text: #F3F0FB;
+  --accent: #293452;
+  --accent-strong: #323F63;
+  --accent-text: #F2EFE6;
 
-  --field-idle: rgba(255, 255, 255, 0.08);
-  --icon-muted: #9D9AB4;
+  --bubble-assistant-bg: #EAE6DD;
 
-  /* Dark halo that lifts light text off the vivid burst */
-  --halo: rgba(6, 6, 14, 0.92);
-  --halo-soft: rgba(6, 6, 14, 0.6);
+  --bubble-shadow: 0 1px 2px rgba(28, 32, 48, 0.10);
 
-  --glass-bg: linear-gradient(135deg, rgba(30, 30, 48, 0.55) 0%, rgba(20, 20, 34, 0.32) 100%);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 12px 48px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --field-idle: rgba(20, 22, 30, 0.05);
+  --icon-muted: #9A988E;
 
-  --accent-ring: rgba(150, 140, 235, 0.35);
+  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.70) 0%, rgba(255, 255, 255, 0.40) 100%);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 4px 24px rgba(28, 32, 48, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1A1917;
+    --text: #E9E6DE;
+    --text-secondary: #908D83;
+    --text-tertiary: #5D5B53;
+
+    --accent: #3C4B76;
+    --accent-strong: #46578A;
+    --accent-text: #EFEDE6;
+
+    --bubble-assistant-bg: #2A2825;
+
+    --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.40);
+
+    --field-idle: rgba(255, 255, 255, 0.07);
+    --icon-muted: #8A877E;
+
+    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.72) 0%, rgba(48, 46, 42, 0.42) 100%);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 6px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
 }
 
 /* ============================================================
@@ -50,12 +81,17 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  /* Lock the page so iOS cannot scroll it when the keyboard opens */
   position: fixed;
   top: 0;
   left: 0;
 }
 
-#root { height: 100%; width: 100%; overflow: hidden; }
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
 
 body {
   font-family: var(--font-sans);
@@ -75,214 +111,264 @@ input, textarea, button {
 }
 
 button { cursor: pointer; }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
+@media (prefers-reduced-motion: reduce) {
+  .loading-dots span { animation: none; opacity: 0.5; }
+}
+
 /* ============================================================
-   App shell + depth
+   Layout
    ============================================================ */
 
 .app {
-  position: relative;
   height: 100%;
-  width: 100%;
-  overflow: hidden;
-  background:
-    radial-gradient(130% 95% at 50% 18%, var(--bg) 0%, var(--bg-deep) 100%);
-  /* Smoothly lifts the whole page above the mobile keyboard (see
-     useViewportKeyboard, which sets transform: translateY). */
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-/* ============================================================
-   Prismatic burst — the centrepiece
-   ============================================================ */
-
-.prismatic {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* Screen-blend the opaque burst onto the deep gradient: near-black rays keep
-   the gradient, bright rays glow additively. */
-.prismatic canvas {
-  mix-blend-mode: screen;
-}
-
-/* Focal scrim — gently darkens the centre so a message reads while the burst
-   keeps glowing around it. */
-.stage-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    radial-gradient(60% 42% at 50% 53%,
-      rgba(5, 5, 12, 0.62) 0%,
-      rgba(5, 5, 12, 0.32) 42%,
-      transparent 72%);
-}
-
-/* ============================================================
-   Stage — the single living message
-   ============================================================ */
-
-.stage-wrap {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Balanced top/bottom so the message sits at the burst's true visual centre
-     (slightly below the geometric middle), not floating high. */
-  padding: 19vh 28px 15vh;
-  pointer-events: none;
-}
-
-.stage {
-  width: 100%;
-  max-width: 640px;
-  will-change: transform, opacity, filter;
-}
-
-/* The ascending-words overlay rides above the dissolving old content. */
-.ascend-wrap { z-index: 3; }
-.ascend-wrap .stage-text { will-change: transform, opacity, filter; }
-
-.stage-inner { will-change: transform; }
-
-.stage-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
-
-/* ---------- Idle wordmark ---------- */
-
-.stage-idle { text-align: center; font-family: var(--font-serif); }
-
-.stage-wordmark {
-  font-size: clamp(46px, 9vw, 76px);
-  font-weight: 400;
-  letter-spacing: 1.5px;
-  color: var(--text);
-  text-shadow: 0 0 40px var(--halo), 0 1px 2px var(--halo);
-}
-
-.stage-subtitle {
-  margin-top: 16px;
-  font-size: clamp(16px, 2.6vw, 21px);
-  color: var(--text-secondary);
-  letter-spacing: 0.4px;
-  text-shadow: 0 0 24px var(--halo);
-}
-
-/* ---------- Message text ---------- */
-
-/* User question and assistant reply share one identical treatment. */
-.stage-text {
-  pointer-events: auto;
-  font-family: var(--font-serif);
-  font-size: clamp(22px, 3.4vw, 29px);
-  line-height: 1.5;
-  letter-spacing: 0.2px;
-  text-align: center;
-  text-wrap: balance;
-  color: var(--text);
-  max-width: 20em;
-  margin: 0 auto;
-  max-height: 66vh;
-  /* Locked by default so a message that fits can't rubber-band; StageText flips
-     this to `auto` only when the content actually overflows. */
-  overflow-y: hidden;
-  overscroll-behavior: contain;
-  /* halo keeps every line legible over the moving light */
-  text-shadow: 0 0 26px var(--halo), 0 0 10px var(--halo), 0 1px 2px var(--halo-soft);
-}
-
-.stage-text.markdown strong { font-weight: 600; }
-.stage-text.markdown em { font-style: italic; }
-.stage-text p + p { margin-top: 0.9em; }
-
-/* When the message overflows its bounds it scrolls; the edges fade so the
-   reader can tell there's more above/below. Fade depth tracks scroll position
-   (set as CSS vars by StageText), so it grows in only where there's more. */
-.stage-text.is-scrollable {
-  overflow-y: auto;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 var(--fade-top, 0px),
-    #000 calc(100% - var(--fade-bottom, 0px)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 var(--fade-top, 0px),
-    #000 calc(100% - var(--fade-bottom, 0px)),
-    transparent 100%
-  );
-}
-
-/* ============================================================
-   Dock — the input
-   ============================================================ */
-
-.dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px calc(22px + env(safe-area-inset-bottom));
-  margin-bottom: 1em;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  position: relative;
 }
 
-.dock-new {
+/* ============================================================
+   Hero
+   ============================================================ */
+
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding-bottom: 100px;
+  font-family: var(--font-serif);
+}
+
+.hero-title {
+  font-size: 44px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.hero-subtitle {
+  font-size: 19px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.hero-credit {
+  position: absolute;
+  top: calc(60% + 76px);
   font-size: 12px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
   color: var(--text-tertiary);
-  padding: 4px 8px;
+  letter-spacing: 0.3px;
+  font-family: var(--font-sans);
+}
+
+.hero-credit a {
+  color: var(--text-tertiary);
+  text-decoration: none;
   transition: color 0.2s ease;
 }
 
-.dock-new:hover { color: var(--text-secondary); }
+.hero-credit a:hover { color: var(--text-secondary); }
+
+@media (min-width: 768px) {
+  .hero-title { font-size: 60px; }
+  .hero-subtitle { font-size: 27px; }
+}
+
+/* ============================================================
+   Messages
+   ============================================================ */
+
+.messages-wrapper {
+  position: fixed;
+  inset: 0;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
+}
+
+.messages-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 72px 20px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+@media (min-width: 768px) {
+  .messages-scroll { padding-left: 28px; padding-right: 28px; }
+}
+
+/* Spacer below the last message. Height is set dynamically by useChatScroll so
+   that (a) a freshly sent user message can pin to the top of the viewport, and
+   (b) once content fills the screen, the last assistant bottom rests near the
+   vertical middle when scrolled all the way down. */
+.messages-bottom-spacer {
+  flex-shrink: 0;
+}
+
+.msg-row { display: flex; }
+
+.msg-row-user { justify-content: flex-end; }
+
+/* A turn is "user → assistant"; add space after the assistant before the next
+   user message, keeping each question tight to its answer. */
+.msg-row-assistant {
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+/* ---------- Bubbles ---------- */
+
+.bubble {
+  padding: var(--bubble-pad-y) var(--bubble-pad-x);
+  border-radius: 20px;
+  font-size: var(--bubble-font);
+  line-height: var(--bubble-line);
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: var(--bubble-shadow);
+}
+
+.bubble-user {
+  max-width: 78%;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.bubble-assistant {
+  max-width: 82%;
+  min-width: 0;
+  background: var(--bubble-assistant-bg);
+  color: var(--text);
+}
+
+.markdown strong { font-weight: 600; }
+.markdown em { font-style: italic; }
+
+@media (min-width: 768px) {
+  :root { --bubble-font: 16.5px; }
+}
+
+/* ---------- Assistant row (avatar + bubble) ---------- */
+
+.assistant {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.assistant-mark {
+  flex-shrink: 0;
+  /* Same height as a single-line bubble, top-aligned, so the avatar and a
+     one-line reply are exactly the same size and edge-to-edge. */
+  width: var(--bubble-1line);
+  height: var(--bubble-1line);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: var(--font-serif);
+  font-size: calc(var(--bubble-1line) * 0.45);
+  line-height: 1;
+  user-select: none;
+}
+
+/* ---------- Loading dots ---------- */
+
+.loading-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  /* One line tall, so the typing bubble matches a single-line text bubble. */
+  height: calc(var(--bubble-font) * var(--bubble-line));
+}
+
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.4;
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dot-pulse {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 0.9;  transform: translateY(-3px); }
+}
+
+/* ============================================================
+   Input bar
+   ============================================================ */
+
+.input-bar {
+  left: 0;
+  right: 0;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  z-index: 20;
+}
+
+.input-bar-hero {
+  position: absolute;
+  top: 55%;
+  padding: 0 24px;
+}
+
+.input-bar-fixed {
+  position: fixed;
+  bottom: 0;
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
 
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(22px) saturate(1.5);
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
-.dock-field {
-  width: 100%;
-  max-width: 600px;
+.input-field {
+  flex: 1;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  border-radius: 26px;
-  padding: 9px 9px 9px 22px;
-  transition: box-shadow 0.3s ease;
+  border-radius: 24px;
+  padding: 8px 8px 8px 20px;
 }
 
-.dock-field.is-busy { animation: dock-pulse 2s ease-in-out infinite; }
-
-@keyframes dock-pulse {
-  0%, 100% { box-shadow: var(--glass-shadow); }
-  50%      { box-shadow: var(--glass-shadow), 0 0 0 1px var(--accent-ring), 0 0 22px var(--accent-ring); }
-}
-
-.dock-textarea {
+.input-textarea {
   flex: 1;
   font-size: 16px;
   line-height: 1.5;
@@ -290,14 +376,14 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   resize: none;
   background: transparent;
   max-height: 120px;
-  padding: 5px 0;
+  padding: 4px 0;
 }
 
-.dock-textarea::placeholder { color: var(--text-tertiary); }
+.input-textarea::placeholder { color: var(--text-tertiary); }
 
-.dock-send {
-  width: 34px;
-  height: 34px;
+.send-btn {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--field-idle);
   color: var(--icon-muted);
@@ -305,49 +391,21 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; bo
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.25s ease, color 0.25s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.dock-send.is-active { background: var(--accent); color: var(--accent-text); }
-
-/* ============================================================
-   Liquid glass — the input field on supported (Chromium) platforms
-   ============================================================ */
-
-.lg-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
-
-/* Refraction lives in the SVG filter (backdrop-filter: url). The element only
-   carries a faint tint + the specular rim highlight on top. */
-.dock-field.liquid {
-  position: relative;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: url(#lg-dock);
-  backdrop-filter: url(#lg-dock);
-  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.5);
+.send-btn-active {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
-/* Specular rim — a bright bevel of light along the glass edge. Its opacity is
-   the fourth slider (Specular Opacity). */
-.dock-field.liquid::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: var(--lg-spec, 0.55);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.85),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-    inset 1.5px 0 4px rgba(255, 255, 255, 0.18),
-    inset -1.5px 0 4px rgba(255, 255, 255, 0.18),
-    inset 0 -2px 6px rgba(255, 255, 255, 0.22);
-}
-
-/* ============================================================
-   Motion preferences
-   ============================================================ */
-
-@media (prefers-reduced-motion: reduce) {
-  .dock-field.is-busy { animation: none; }
+.new-chat-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  flex-shrink: 0;
+  color: var(--icon-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

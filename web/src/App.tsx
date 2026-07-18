@@ -1,100 +1,61 @@
 import { useRef, useState } from 'react'
-import { PrismaticBurst } from './components/PrismaticBurst'
-import { MessageStage } from './components/MessageStage'
-import { AscendingMessage } from './components/AscendingMessage'
-import { InputDock } from './components/InputDock'
-import { GLASS_DEFAULTS } from './components/LiquidGlass'
-import { useConversationStage } from './hooks/useConversationStage'
+import { AnimatePresence } from 'framer-motion'
+import { Hero } from './components/Hero'
+import { InputBar } from './components/InputBar'
+import { MessageList } from './components/MessageList'
+import { useChatStream } from './hooks/useChatStream'
+import { useChatScroll } from './hooks/useChatScroll'
 import { useViewportKeyboard } from './hooks/useViewportKeyboard'
-import { useLiquidGlassSupport } from './hooks/useLiquidGlassSupport'
-
-// Resting centre of the stage as a fraction of viewport height — must match the
-// .stage-wrap padding (top 19vh / bottom 15vh → centre at 0.52).
-const STAGE_CENTER = 0.52
-// Roughly input font (16px) over resting serif (~26px) so the words start
-// input-sized and grow as they rise.
-const START_SCALE = 0.62
-
-interface Flight {
-  id: number
-  text: string
-  startY: number
-  scale: number
-}
 
 function App() {
   const [input, setInput] = useState('')
-  const [flight, setFlight] = useState<Flight | null>(null)
-  const flightId = useRef(0)
-  const { phase, role, text, intensity, busy, submit, arrive, reset } = useConversationStage()
-  const started = !(role === 'idle' && phase === 'idle')
-
-  const liquidSupported = useLiquidGlassSupport()
-
-  const appRef = useRef<HTMLDivElement>(null)
-  const dockRef = useRef<HTMLDivElement>(null)
+  const { messages, isStreaming, send, reset } = useChatStream()
+  const chatStarted = messages.length > 0
+  const inputBarRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useViewportKeyboard(started, textareaRef, appRef)
+
+  const { containerRef, spacerRef, registerMessage, scrollNewUserMessageToTop } =
+    useChatScroll(messages, isStreaming)
+
+  useViewportKeyboard(chatStarted, textareaRef, inputBarRef)
 
   const handleSend = () => {
     const trimmed = input.trim()
-    if (!trimmed || busy) return
+    if (!trimmed || isStreaming) return
     setInput('')
-
-    // Launch the words from the input up to the centre. The overlay animates in
-    // the app's layout space; if the keyboard has lifted the app, add the overlap
-    // back so the origin maps to the input's true (resting) position.
-    const rect = textareaRef.current?.getBoundingClientRect()
-    const vv = window.visualViewport
-    const overlap = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0
-    const startY = rect
-      ? rect.top + rect.height / 2 + overlap - window.innerHeight * STAGE_CENTER
-      : window.innerHeight * 0.4
-    setFlight({ id: ++flightId.current, text: trimmed, startY, scale: START_SCALE })
-    submit(trimmed)
-  }
-
-  const handleArrived = () => {
-    arrive()
-    setFlight(null)
+    const newUserIdx = messages.length
+    send(trimmed)
+    scrollNewUserMessageToTop(newUserIdx)
   }
 
   const handleNewChat = () => {
     reset()
-    setFlight(null)
     setInput('')
   }
 
   return (
-    <div className="app" ref={appRef}>
-      <PrismaticBurst intensity={intensity} />
-      <div className="stage-scrim" aria-hidden="true" />
+    <div className="app">
+      <AnimatePresence>{!chatStarted && <Hero />}</AnimatePresence>
 
-      <main className="stage-wrap">
-        <MessageStage role={role} text={text} phase={phase} />
-      </main>
+      <AnimatePresence>
+        {chatStarted && (
+          <MessageList
+            messages={messages}
+            containerRef={containerRef}
+            spacerRef={spacerRef}
+            registerMessage={registerMessage}
+          />
+        )}
+      </AnimatePresence>
 
-      {flight && (
-        <AscendingMessage
-          key={flight.id}
-          text={flight.text}
-          startY={flight.startY}
-          startScale={flight.scale}
-          onArrived={handleArrived}
-        />
-      )}
-
-      <InputDock
-        ref={dockRef}
+      <InputBar
+        ref={inputBarRef}
         textareaRef={textareaRef}
         value={input}
         onChange={setInput}
         onSend={handleSend}
         onNewChat={handleNewChat}
-        started={started}
-        disabled={busy}
-        liquid={liquidSupported}
-        glass={GLASS_DEFAULTS}
+        chatStarted={chatStarted}
       />
     </div>
   )

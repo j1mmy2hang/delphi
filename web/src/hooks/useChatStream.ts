@@ -54,24 +54,14 @@ const runStream = async (
   let accumulated = ''
 
   try {
-    let response: Response
-    try {
-      response = await fetch('/.netlify/functions/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
-        signal: controller.signal,
-      })
-    } catch (err) {
-      // No backend (plain `vite dev`): let the design be experienced offline.
-      if (import.meta.env.DEV) return void (await simulateStream(setMessages, controller))
-      throw err
-    }
+    const response = await fetch('/.netlify/functions/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history }),
+      signal: controller.signal,
+    })
 
-    if (!response.ok || !response.body) {
-      if (import.meta.env.DEV) return void (await simulateStream(setMessages, controller))
-      throw new Error('Request failed')
-    }
+    if (!response.ok || !response.body) throw new Error('Request failed')
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -124,30 +114,5 @@ const runStream = async (
       abortRef.current = null
       setIsStreaming(false)
     }
-  }
-}
-
-// Dev-only: a canned oracle reply, streamed word by word, so the wave can be
-// experienced without the Netlify function running.
-const simulateStream = async (
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  controller: AbortController,
-) => {
-  const reply =
-    'The clearest thinking rarely arrives as a single answer. It surfaces as a better question — ' +
-    'one that quietly reframes what you were certain you already knew. Sit with the tension a moment longer ' +
-    'than feels comfortable, and notice what it is protecting.'
-  const words = reply.split(' ')
-  let acc = ''
-  for (const word of words) {
-    if (controller.signal.aborted) return
-    acc += (acc ? ' ' : '') + word
-    const snapshot = acc
-    setMessages(prev => {
-      const next = [...prev]
-      next[next.length - 1] = { role: 'assistant', content: snapshot }
-      return next
-    })
-    await new Promise(r => setTimeout(r, 38))
   }
 }
