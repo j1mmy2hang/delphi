@@ -58,7 +58,7 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
           <motion.div
             layout
             transition={SPRING_SOFT}
-            className="input-field glass"
+            className="input-field surface"
           >
             <textarea
               ref={textareaRef}
@@ -80,16 +80,19 @@ export const InputBar = forwardRef<HTMLDivElement, Props>(
             </motion.button>
           </motion.div>
 
+          {/* Collapses its width and margin rather than only fading: a button
+              that fades while still 48px wide releases that space in one step
+              on unmount, and the field snaps out to fill it. */}
           <AnimatePresence>
             {chatStarted && (
               <motion.button
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={SPRING}
+                initial={{ opacity: 0, scale: 0.8, width: 0, marginLeft: 0 }}
+                animate={{ opacity: 1, scale: 1, width: 48, marginLeft: 10 }}
+                exit={{ opacity: 0, scale: 0.8, width: 0, marginLeft: 0 }}
+                transition={SPRING_SOFT}
                 whileTap={{ scale: 0.88 }}
                 onClick={onNewChat}
-                className="new-chat-btn glass"
+                className="new-chat-btn surface"
                 aria-label="New chat"
               >
                 <MessageCirclePlus size={20} strokeWidth={1.8} />

@@ -2,8 +2,13 @@
    Design tokens
    ============================================================ */
 
+/* Theme is driven entirely by [data-theme] on <html>, which the inline script in
+   index.html sets before first paint (from localStorage, else the OS setting).
+   There is no prefers-color-scheme block: this is a React SPA with no UI at all
+   without JS, so the attribute is always present and the dark palette lives in
+   exactly one place. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --content-width: 760px;
 
@@ -20,50 +25,92 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
     'PingFang SC', 'Segoe UI', system-ui, sans-serif;
 
-  /* Light palette — warm paper */
-  --bg: #F7F5F0;
-  --text: #26262B;
-  --text-secondary: #8A887F;
-  --text-tertiary: #B6B3A9;
+  /* ---------- Flexoki ramp (Steph Ango) ----------
+     The raw scale, unthemed. Flexoki's warmth lives in the base tones: every
+     neutral carries a trace of yellow, so large fields of "grey" read as paper
+     and ink rather than as screen. Nothing below references these directly —
+     the semantic tokens under it do the mapping, once per theme. */
+  --paper: #fffcf0;
+  --base-50: #f2f0e5;
+  --base-100: #e6e4d9;
+  --base-150: #dad8ce;
+  --base-200: #cecdc3;
+  --base-300: #b7b5ac;
+  --base-400: #9f9d96;
+  --base-500: #878580;
+  --base-600: #6f6e69;
+  --base-700: #575653;
+  --base-850: #343331;
+  --base-900: #282726;
+  --base-950: #1c1b1a;
+  --black: #100f0f;
 
-  --accent: #293452;
-  --accent-strong: #323F63;
-  --accent-text: #F2EFE6;
+  --blue-600: #205ea6;
+  --blue-700: #1a4f8c;
+  --blue-800: #163b66;
 
-  --bubble-assistant-bg: #EAE6DD;
+  /* ---------- Light: ink on paper ----------
+     Solid tones rather than translucent overlays. Alpha over a warm ground
+     desaturates toward grey; picking the tone that Flexoki already places at
+     that step keeps the yellow cast intact at every depth. */
+  --bg: var(--paper);
+  --text: var(--black);
+  --text-secondary: var(--base-600);
+  /* base-400 is the prettier step here but lands at 2.6:1 — too faint for
+     placeholder text. base-500 clears 3:1 and still reads as a whisper. */
+  --text-tertiary: var(--base-500);
 
-  --bubble-shadow: 0 1px 2px rgba(28, 32, 48, 0.10);
+  /* Deep ink blue, not a UI blue — it has to sit in a page of prose without
+     shouting. blue-800 lands at 11:1 against paper, matching the depth of the
+     navy this palette replaced. */
+  --accent: var(--blue-800);
+  --accent-text: var(--paper);
 
-  --field-idle: rgba(20, 22, 30, 0.05);
-  --icon-muted: #9A988E;
+  --bubble-assistant-bg: var(--base-100);
 
-  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.70) 0%, rgba(255, 255, 255, 0.40) 100%);
-  --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-shadow: 0 4px 24px rgba(28, 32, 48, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --bubble-shadow: 0 1px 2px rgba(16, 15, 15, 0.06);
+
+  --field-idle: var(--base-100);
+  /* base-500 is Flexoki's pivot — the one tone that clears 3:1 against both
+     paper and black, so icons hold their weight in either theme. */
+  --icon-muted: var(--base-500);
+
+  /* Recessed surfaces (input field, buttons): one step down the ramp from the
+     page, so they read as a dip *in* the paper rather than a card on top of it. */
+  --surface-bg: var(--base-50);
+  --surface-border: var(--base-100);
+  --surface-bg-focus: var(--base-100);
+  --surface-border-focus: var(--base-150);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1A1917;
-    --text: #E9E6DE;
-    --text-secondary: #908D83;
-    --text-tertiary: #5D5B53;
+/* ---------- Dark: ink-black, not inverted ----------
+     Text stops at base-200 instead of reaching paper: full-strength white on
+     black glares and blooms, and this app is read in long passages. The accent
+     climbs one step (600 → 500) because a dark ground swallows chroma. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-    --accent: #3C4B76;
-    --accent-strong: #46578A;
-    --accent-text: #EFEDE6;
+  --bg: var(--black);
+  --text: var(--base-200);
+  --text-secondary: var(--base-500);
+  --text-tertiary: var(--base-600);
 
-    --bubble-assistant-bg: #2A2825;
+  /* One step up from light — a dark ground swallows chroma, and blue-700 keeps
+     the same separation from the page that blue-800 has on paper. */
+  --accent: var(--blue-700);
+  --accent-text: var(--paper);
 
-    --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --bubble-assistant-bg: var(--base-900);
 
-    --field-idle: rgba(255, 255, 255, 0.07);
-    --icon-muted: #8A877E;
+  --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 
-    --glass-bg: linear-gradient(135deg, rgba(48, 46, 42, 0.72) 0%, rgba(48, 46, 42, 0.42) 100%);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-shadow: 0 6px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
+  --field-idle: var(--base-900);
+  --icon-muted: var(--base-500);
+
+  --surface-bg: var(--base-950);
+  --surface-border: var(--base-900);
+  --surface-bg-focus: var(--base-900);
+  --surface-border-focus: var(--base-850);
 }
 
 /* ============================================================
@@ -330,33 +377,65 @@ button:focus-visible {
   right: 0;
   max-width: var(--content-width);
   margin: 0 auto;
+  /* Shared by both states. A different horizontal inset per state resizes the
+     field the instant the class swaps, which no amount of layout animation can
+     smooth over — so only the vertical padding differs below. */
+  padding-left: 20px;
+  padding-right: 20px;
   z-index: 20;
 }
 
 .input-bar-hero {
   position: absolute;
   top: 55%;
-  padding: 0 24px;
 }
 
 .input-bar-fixed {
   position: fixed;
   bottom: 0;
-  padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+  padding-top: 12px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
 }
 
+/* Dissolve scrolled messages into the page above the docked bar, so the bar
+   sits in the background instead of overlapping it with a hard edge. */
+.input-bar-fixed::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 48px;
+  /* A flat --bg shaped by a mask, not a gradient between two colour tokens:
+     background-image can't be transitioned, so a gradient would snap mid-fade
+     while every other surface eased across. */
+  background: var(--bg);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black);
+  mask-image: linear-gradient(to bottom, transparent, black);
+  pointer-events: none;
+}
+
+.input-bar-fixed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  z-index: -1;
+}
+
+/* No `gap` — the new-chat button animates its own margin open and shut, and a
+   gap would hold its 10px even at zero width, leaving a notch mid-collapse. */
 .input-row {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
 }
 
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+/* Recessed surface — a tinted dip in the page. Deliberately no shadow and no
+   backdrop blur: nothing scrolls under it now that the bar is opaque. */
+.surface {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
 .input-field {
@@ -366,6 +445,11 @@ button:focus-visible {
   gap: 8px;
   border-radius: 24px;
   padding: 8px 8px 8px 20px;
+}
+
+.input-field:focus-within {
+  background: var(--surface-bg-focus);
+  border-color: var(--surface-border-focus);
 }
 
 .input-textarea {
@@ -400,7 +484,6 @@ button:focus-visible {
 }
 
 .new-chat-btn {
-  width: 48px;
   height: 48px;
   border-radius: 24px;
   flex-shrink: 0;
@@ -408,4 +491,67 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Width is driven by the mount/unmount animation; clip the icon as it closes. */
+  overflow: hidden;
+}
+
+@media (hover: hover) {
+  .new-chat-btn:hover {
+    background: var(--surface-bg-focus);
+    border-color: var(--surface-border-focus);
+    color: var(--text-secondary);
+  }
+
+  .theme-toggle:hover { color: var(--text-secondary); }
+}
+
+/* ============================================================
+   Theme toggle
+   ============================================================ */
+
+/* Bare mark — no button chrome. Sits in the corner as a glyph, not a control. */
+.theme-toggle {
+  position: fixed;
+  right: 22px;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  z-index: 30;
+  padding: 6px;
+  color: var(--icon-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Once a conversation starts the docked input bar owns the bottom edge. On
+   viewports too narrow to have a side gutter, lift the toggle clear of it. */
+@media (max-width: 860px) {
+  .app-chatting .theme-toggle {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Cross-fade the whole palette, but only while a switch is in flight — a
+   standing universal transition would smear every other colour change.
+   Symmetric ease-in-out so the fade starts and lands gently instead of
+   snapping off the mark; fill/stroke carry the SVG icons along with it.
+   Duration mirrors FADE_MS in hooks/useTheme.ts. */
+:root.theming,
+:root.theming *,
+:root.theming *::before,
+:root.theming *::after {
+  transition-property: background-color, border-color, color, box-shadow, fill,
+    stroke, outline-color, text-decoration-color !important;
+  transition-duration: 0.5s !important;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root.theming,
+  :root.theming *,
+  :root.theming *::before,
+  :root.theming *::after {
+    transition: none !important;
+  }
 }

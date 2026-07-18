@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Hero } from './components/Hero'
 import { InputBar } from './components/InputBar'
 import { MessageList } from './components/MessageList'
+import { ThemeToggle } from './components/ThemeToggle'
 import { useChatStream } from './hooks/useChatStream'
 import { useChatScroll } from './hooks/useChatScroll'
 import { useViewportKeyboard } from './hooks/useViewportKeyboard'
@@ -34,7 +35,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${chatStarted ? 'app-chatting' : ''}`}>
       <AnimatePresence>{!chatStarted && <Hero />}</AnimatePresence>
 
       <AnimatePresence>
@@ -57,6 +58,8 @@ function App() {
         onNewChat={handleNewChat}
         chatStarted={chatStarted}
       />
+
+      <ThemeToggle />
     </div>
   )
 }
