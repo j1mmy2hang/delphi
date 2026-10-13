@@ -16,3 +16,9 @@ export const SPRING_GLIDE: Transition = { type: 'spring', stiffness: 320, dampin
 // the only motion the eye follows.
 export const EASE_IN = [0.4, 0, 1, 1] as const
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const
+
+// Phones: header buttons float over the conversation instead of sitting in a
+// bar, so they need their own ground to stay legible over text scrolling
+// beneath — a small translucent pill. Desktop keeps them plain.
+export const FLOATING_BUTTON =
+  'pointer-coarse:size-10 pointer-coarse:rounded-full pointer-coarse:border pointer-coarse:border-border pointer-coarse:bg-background/85 pointer-coarse:text-foreground pointer-coarse:backdrop-blur-md'

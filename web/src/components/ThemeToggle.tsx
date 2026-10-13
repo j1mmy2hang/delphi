@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { SPRING, SPRING_SOFT } from '../constants'
+import { cn } from '@/lib/utils'
+import { FLOATING_BUTTON, SPRING, SPRING_SOFT } from '../constants'
 import { useTheme } from '../hooks/useTheme'
 
 /** Lucide's sun rays, drawn as one group so they retract together. */
@@ -33,7 +34,10 @@ export const ThemeToggle = () => {
   return (
     <motion.button
       onClick={toggle}
-      className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+      className={cn(
+        "flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground",
+        FLOATING_BUTTON,
+      )}
       whileTap={{ scale: 0.9 }}
       transition={SPRING}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}

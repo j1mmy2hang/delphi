@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Streamdown's per-word fade (MessageResponse `animated`). */
+@import "streamdown/styles.css";
 
 /* Streamdown (MessageResponse) ships Tailwind classes in its bundle. */
 @source "../node_modules/streamdown/dist/*.js";
@@ -146,6 +148,15 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  /* Phones: the app is one screen tall, so a drag on the header or composer
+     shouldn't bounce the whole page. The message list scrolls (and bounces)
+     on its own. */
+  @media (pointer: coarse) {
+    html,
+    body {
+      overscroll-behavior: none;
+    }
+  }
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
@@ -203,6 +214,42 @@
   opacity: 0.3 !important;
 }
 
+/* ---------- Phones: fade under the floating header buttons ----------
+   Only once the messages have scrolled beneath them (ScrollEdge sets
+   data-scrolled). The fade's depth is a registered length, so it eases in and
+   out instead of snapping — a gradient itself can't be transitioned. */
+@property --top-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@media (pointer: coarse) {
+  [role='log'] > div {
+    --top-fade: 0px;
+    --top-fade-mask: linear-gradient(
+      to bottom,
+      transparent calc(env(safe-area-inset-top) + var(--top-fade) * 0.15),
+      black calc(env(safe-area-inset-top) + var(--top-fade))
+    );
+    -webkit-mask-image: var(--top-fade-mask);
+    mask-image: var(--top-fade-mask);
+    transition: --top-fade 0.2s ease-out;
+  }
+
+  [role='log'] > div[data-scrolled='true'] {
+    --top-fade: 4.5rem;
+  }
+}
+
+/* Phones: the home screen's fine print steps aside while the keyboard is up
+   (useMobileViewport sets data-keyboard), leaving the space to the composer. */
+@media (pointer: coarse) {
+  :root[data-keyboard] .home-note {
+    display: none;
+  }
+}
+
 /* ---------- Loading state (beautifului.dev "Dots") ---------- */
 @keyframes pixel-on {
   0%, 100% { opacity: 0.15; }
@@ -237,5 +284,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root.theming { transition: none !important; }
-  .loading-dot, .shimmer-text { animation: none !important; }
+  .loading-dot, .shimmer-text, [data-sd-animate] { animation: none !important; }
+  [data-sd-animate-marker]::marker { animation: none !important; }
 }
