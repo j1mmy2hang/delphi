@@ -226,8 +226,10 @@ function App() {
                   // rather than carrying on to the page.
                   scrollClassName="overscroll-y-contain"
                   // Phones: room at the top for the floating buttons, which the
-                  // messages scroll up beneath.
-                  className="mx-auto w-full max-w-3xl px-5 pt-2 pb-8 pointer-coarse:pt-[calc(4rem+env(safe-area-inset-top))]"
+                  // messages scroll up beneath. And always 1px taller than the
+                  // list, so it's always scrollable: iOS only rubber-bands a
+                  // scroller with overflow, so a short conversation felt dead.
+                  className="mx-auto w-full max-w-3xl px-5 pt-2 pb-8 pointer-coarse:min-h-[calc(100%+1px)] pointer-coarse:pt-[calc(4rem+env(safe-area-inset-top))]"
                 >
                   {messages.map((message, i) => {
                     const text =
