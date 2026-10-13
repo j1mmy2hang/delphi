@@ -55,6 +55,9 @@ export const ThemeToggle = () => {
           <motion.circle
             r="8.5"
             fill="black"
+            // Start at the animated values: without them the first frame has
+            // no cx/cy, which the browser reports as an invalid attribute.
+            initial={false}
             animate={{ cx: isDark ? 17.5 : 32, cy: isDark ? 6.5 : -10 }}
             transition={spring}
           />
@@ -65,6 +68,7 @@ export const ThemeToggle = () => {
           cy="12"
           fill="currentColor"
           mask="url(#delphi-crescent)"
+          initial={false}
           animate={{ r: isDark ? 9 : 5 }}
           transition={spring}
         />

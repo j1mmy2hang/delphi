@@ -137,59 +137,64 @@ export const useConversationLibrary = () => {
     }
   }, [activate, forget])
 
+  // True while a folder picker is open. A second showDirectoryPicker call
+  // meanwhile fails with "File picker already active", so extra clicks are
+  // ignored instead of erroring.
+  const pickingRef = useRef(false)
+
   /**
-   * Opens the system folder picker. Must be called from a click. `startIn`
-   * lets reconnect open it on the folder that was linked before.
+   * Opens the system folder picker. Must be called from a click.
+   *
+   * Always the same call, with no folder handle as the starting point: given
+   * one (`startIn: <handle>`), Arc and Dia's picker never reports back — the
+   * pick is lost and every later call fails as "already active". The `id`
+   * makes the browser reopen it where the last folder was picked anyway.
    */
-  const chooseFolder = useCallback(async (startIn: FileSystemHandle | 'documents' = 'documents') => {
+  const chooseFolder = useCallback(async () => {
+    if (pickingRef.current) return
+    pickingRef.current = true
     try {
-      const dir = await window.showDirectoryPicker!({ id: 'delphi', mode: 'readwrite', startIn })
+      const dir = await window.showDirectoryPicker!({ id: 'delphi', mode: 'readwrite', startIn: 'documents' })
       await saveDirHandle(dir)
       await activate(dir)
     } catch (err) {
       const name = (err as Error).name
       // Closing the picker is a choice, not an error.
       if (name === 'AbortError') return
-      // After a "Don't allow" in reconnect, Chrome may not grant a second
-      // dialog from the same click. The user just said no; leave it there.
+      // No click to open it from, or a picker still open elsewhere.
       if (name === 'SecurityError' || name === 'NotAllowedError') {
         console.warn('Folder picker unavailable:', err)
         return
       }
       throw err
+    } finally {
+      pickingRef.current = false
     }
   }, [activate])
 
   /**
    * Re-grants access to the remembered folder. Must be called from a click.
    *
-   * Through the folder picker, opened on that folder — not Chrome's "allow
-   * again?" prompt (requestPermission). Arc and Dia don't show that prompt:
-   * the request goes unanswered or is refused unseen, and either way the click
-   * that could have opened anything is spent. Choosing the folder in the picker
-   * grants access in every Chromium browser, and it's the one step every one
-   * of them already handles (it's how the folder was linked to begin with).
+   * Through the folder picker — not Chrome's "allow again?" prompt
+   * (requestPermission). Arc and Dia don't show that prompt: the request goes
+   * unanswered or is refused unseen, and either way the click that could have
+   * opened anything is spent. Choosing the folder in the picker grants access
+   * in every Chromium browser; it's how the folder was linked to begin with.
    *
    * The permission is checked first — that needs no click and spends nothing —
    * so if access was restored meanwhile, saving resumes with no picker at all.
    */
   const reconnect = useCallback(async () => {
     const dir = dirRef.current
-    if (!dir) return chooseFolder()
-    try {
-      if ((await dir.queryPermission(READWRITE)) === 'granted') return activate(dir)
-    } catch (err) {
-      // Folder moved or deleted: the picker starts from Documents instead.
-      console.warn('[reconnect] linked folder unavailable:', err)
-      return chooseFolder()
+    if (dir) {
+      try {
+        if ((await dir.queryPermission(READWRITE)) === 'granted') return activate(dir)
+      } catch (err) {
+        // Folder moved or deleted: just pick again.
+        console.warn('[reconnect] linked folder unavailable:', err)
+      }
     }
-    try {
-      await chooseFolder(dir)
-    } catch (err) {
-      // A handle the picker can't start from (the folder went away since).
-      console.warn('[reconnect] could not open the picker on the old folder:', err)
-      await chooseFolder()
-    }
+    return chooseFolder()
   }, [activate, chooseFolder])
 
   /** Stops saving to the folder. The files in it are left as they are. */
