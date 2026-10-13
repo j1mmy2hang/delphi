@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Message } from '../types'
+import { mockChatFetch } from '../dev/mockChat'
+
+// Dev talks to a fake backend unless VITE_REAL_API=true; production builds
+// always use the real one (and drop the mock as dead code).
+const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_REAL_API !== 'true'
 
 interface UseChatStream {
   messages: Message[]
   isStreaming: boolean
   send: (text: string) => void
+  stop: () => void
   reset: () => void
 }
 
@@ -22,6 +28,18 @@ export const useChatStream = (): UseChatStream => {
     setIsStreaming(false)
   }, [])
 
+  // Keeps whatever has streamed so far. An assistant turn that never received
+  // a token is dropped rather than left as an empty reply.
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setIsStreaming(false)
+    setMessages(prev => {
+      const last = prev.at(-1)
+      return last?.role === 'assistant' && !last.content ? prev.slice(0, -1) : prev
+    })
+  }, [])
+
   const send = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -37,7 +55,7 @@ export const useChatStream = (): UseChatStream => {
     })
   }, [])
 
-  return { messages, isStreaming, send, reset }
+  return { messages, isStreaming, send, stop, reset }
 }
 
 const runStream = async (
@@ -54,12 +72,14 @@ const runStream = async (
   let accumulated = ''
 
   try {
-    const response = await fetch('/.netlify/functions/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history }),
-      signal: controller.signal,
-    })
+    const response = USE_MOCK
+      ? await mockChatFetch(controller.signal)
+      : await fetch('/.netlify/functions/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history }),
+          signal: controller.signal,
+        })
 
     if (!response.ok || !response.body) throw new Error('Request failed')
 

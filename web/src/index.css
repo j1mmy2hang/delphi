@@ -1,42 +1,84 @@
-/* ============================================================
-   Design tokens
-   ============================================================ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-/* Theme is driven entirely by [data-theme] on <html>, which the inline script in
-   index.html sets before first paint (from localStorage, else the OS setting).
-   There is no prefers-color-scheme block: this is a React SPA with no UI at all
-   without JS, so the attribute is always present and the dark palette lives in
-   exactly one place. */
+/* Streamdown (MessageResponse) ships Tailwind classes in its bundle. */
+@source "../node_modules/streamdown/dist/*.js";
+
+/* Theme is driven by [data-theme] on <html>, which the inline script in
+   index.html sets before first paint. shadcn's `dark:` variant follows it. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
+    'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
+  --font-heading: var(--font-sans);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* The semantic tokens are registered as <color> so a theme switch transitions
+   the tokens themselves, once, on <html> — every element that reads them
+   follows along without a transition of its own. Transitioning `color` per
+   element breaks in Chrome: an element that sets its own colour restarts its
+   transition on every frame its parent's inherited colour moves. */
+@property --background { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --card { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --card-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --popover { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --popover-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --primary { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --primary-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --secondary { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --secondary-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --muted { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --muted-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --accent { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --accent-foreground { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --destructive { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --border { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --input { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --ring { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
+/* ---------- Flexoki (Steph Ango), mapped onto shadcn's tokens ----------
+   Every neutral carries a trace of yellow, so fields of "grey" read as paper
+   and ink rather than as screen. */
 :root {
   color-scheme: light;
 
-  --content-width: 760px;
-
-  /* Bubble geometry — the avatar and loading state derive their size from these
-     so a single-line bubble, the δ avatar, and the typing indicator stay equal. */
-  --bubble-pad-y: 10px;
-  --bubble-pad-x: 15px;
-  --bubble-font: 16px;
-  --bubble-line: 1.6;
-  --bubble-1line: calc(2 * var(--bubble-pad-y) + var(--bubble-font) * var(--bubble-line));
-
-  /* Type */
-  --font-serif: 'Hedvig Letters Serif', Cochin, 'Hoefler Text', Georgia, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
-    'PingFang SC', 'Segoe UI', system-ui, sans-serif;
-
-  /* ---------- Flexoki ramp (Steph Ango) ----------
-     The raw scale, unthemed. Flexoki's warmth lives in the base tones: every
-     neutral carries a trace of yellow, so large fields of "grey" read as paper
-     and ink rather than as screen. Nothing below references these directly —
-     the semantic tokens under it do the mapping, once per theme. */
   --paper: #fffcf0;
   --base-50: #f2f0e5;
   --base-100: #e6e4d9;
   --base-150: #dad8ce;
   --base-200: #cecdc3;
   --base-300: #b7b5ac;
-  --base-400: #9f9d96;
   --base-500: #878580;
   --base-600: #6f6e69;
   --base-700: #575653;
@@ -45,513 +87,155 @@
   --base-950: #1c1b1a;
   --black: #100f0f;
 
-  --blue-600: #205ea6;
-  --blue-700: #1a4f8c;
-  --blue-800: #163b66;
+  --radius: 0.625rem;
 
-  /* ---------- Light: ink on paper ----------
-     Solid tones rather than translucent overlays. Alpha over a warm ground
-     desaturates toward grey; picking the tone that Flexoki already places at
-     that step keeps the yellow cast intact at every depth. */
-  --bg: var(--paper);
-  --text: var(--black);
-  --text-secondary: var(--base-600);
-  /* base-400 is the prettier step here but lands at 2.6:1 — too faint for
-     placeholder text. base-500 clears 3:1 and still reads as a whisper. */
-  --text-tertiary: var(--base-500);
-
-  /* Deep ink blue, not a UI blue — it has to sit in a page of prose without
-     shouting. blue-800 lands at 11:1 against paper, matching the depth of the
-     navy this palette replaced. */
-  --accent: var(--blue-800);
-  --accent-text: var(--paper);
-
-  --bubble-assistant-bg: var(--base-100);
-
-  --bubble-shadow: 0 1px 2px rgba(16, 15, 15, 0.06);
-
-  --field-idle: var(--base-100);
-  /* base-500 is Flexoki's pivot — the one tone that clears 3:1 against both
-     paper and black, so icons hold their weight in either theme. */
-  --icon-muted: var(--base-500);
-
-  /* Recessed surfaces (input field, buttons): one step down the ramp from the
-     page, so they read as a dip *in* the paper rather than a card on top of it. */
-  --surface-bg: var(--base-50);
-  --surface-border: var(--base-100);
-  --surface-bg-focus: var(--base-100);
-  --surface-border-focus: var(--base-150);
+  /* Light: ink on paper. */
+  --background: var(--paper);
+  --foreground: var(--black);
+  --card: var(--paper);
+  --card-foreground: var(--black);
+  --popover: var(--paper);
+  --popover-foreground: var(--black);
+  --primary: var(--black);
+  --primary-foreground: var(--paper);
+  --secondary: var(--base-50);
+  --secondary-foreground: var(--black);
+  --muted: var(--base-50);
+  --muted-foreground: var(--base-600);
+  --accent: var(--base-50);
+  --accent-foreground: var(--black);
+  --destructive: #af3029;
+  --border: var(--base-150);
+  --input: var(--base-150);
+  --ring: var(--base-300);
 }
 
-/* ---------- Dark: ink-black, not inverted ----------
-     Text stops at base-200 instead of reaching paper: full-strength white on
-     black glares and blooms, and this app is read in long passages. The accent
-     climbs one step (600 → 500) because a dark ground swallows chroma. */
+/* Dark: ink-black, not inverted. Text stops at base-200 — full white on black
+   blooms over long passages. */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: var(--black);
-  --text: var(--base-200);
-  --text-secondary: var(--base-500);
-  --text-tertiary: var(--base-600);
-
-  /* One step up from light — a dark ground swallows chroma, and blue-700 keeps
-     the same separation from the page that blue-800 has on paper. */
-  --accent: var(--blue-700);
-  --accent-text: var(--paper);
-
-  --bubble-assistant-bg: var(--base-900);
-
-  --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-
-  --field-idle: var(--base-900);
-  --icon-muted: var(--base-500);
-
-  --surface-bg: var(--base-950);
-  --surface-border: var(--base-900);
-  --surface-bg-focus: var(--base-900);
-  --surface-border-focus: var(--base-850);
+  --background: var(--black);
+  --foreground: var(--base-200);
+  --card: var(--base-950);
+  --card-foreground: var(--base-200);
+  --popover: var(--base-950);
+  --popover-foreground: var(--base-200);
+  --primary: var(--base-200);
+  --primary-foreground: var(--black);
+  --secondary: var(--base-900);
+  --secondary-foreground: var(--base-200);
+  --muted: var(--base-900);
+  --muted-foreground: var(--base-500);
+  --accent: var(--base-900);
+  --accent-foreground: var(--base-200);
+  --destructive: #d14d41;
+  --border: var(--base-850);
+  --input: var(--base-850);
+  --ring: var(--base-700);
 }
 
-/* ============================================================
-   Base
-   ============================================================ */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-html, body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  /* Lock the page so iOS cannot scroll it when the keyboard opens */
-  position: fixed;
-  top: 0;
-  left: 0;
-}
-
-#root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
-
-body {
-  font-family: var(--font-sans);
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
-input, textarea, button {
-  font-family: inherit;
-  color: inherit;
-  outline: none;
-  border: none;
-  background: none;
-}
-
-button { cursor: pointer; }
-
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-::-webkit-scrollbar { display: none; }
-* { scrollbar-width: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .loading-dots span { animation: none; opacity: 0.5; }
-}
-
-/* ============================================================
-   Layout
-   ============================================================ */
-
-.app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  position: relative;
-}
-
-/* ============================================================
-   Hero
-   ============================================================ */
-
-.hero {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding-bottom: 100px;
-  font-family: var(--font-serif);
-}
-
-.hero-title {
-  font-size: 44px;
-  font-weight: 400;
-  letter-spacing: 1px;
-  color: var(--text);
-  margin-bottom: 14px;
-}
-
-.hero-subtitle {
-  font-size: 19px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  letter-spacing: 0.3px;
-}
-
-.hero-credit {
-  position: absolute;
-  top: calc(60% + 76px);
-  font-size: 12px;
-  color: var(--text-tertiary);
-  letter-spacing: 0.3px;
-  font-family: var(--font-sans);
-}
-
-.hero-credit a {
-  color: var(--text-tertiary);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.hero-credit a:hover { color: var(--text-secondary); }
-
-@media (min-width: 768px) {
-  .hero-title { font-size: 60px; }
-  .hero-subtitle { font-size: 27px; }
-}
-
-/* ============================================================
-   Messages
-   ============================================================ */
-
-.messages-wrapper {
-  position: fixed;
-  inset: 0;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 80px, black calc(100% - 100px), transparent 100%);
-}
-
-.messages-scroll {
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  padding: 72px 20px 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-@media (min-width: 768px) {
-  .messages-scroll { padding-left: 28px; padding-right: 28px; }
-}
-
-/* Spacer below the last message. Height is set dynamically by useChatScroll so
-   that (a) a freshly sent user message can pin to the top of the viewport, and
-   (b) once content fills the screen, the last assistant bottom rests near the
-   vertical middle when scrolled all the way down. */
-.messages-bottom-spacer {
-  flex-shrink: 0;
-}
-
-.msg-row { display: flex; }
-
-.msg-row-user { justify-content: flex-end; }
-
-/* A turn is "user → assistant"; add space after the assistant before the next
-   user message, keeping each question tight to its answer. */
-.msg-row-assistant {
-  justify-content: flex-start;
-  margin-bottom: 14px;
-}
-
-/* ---------- Bubbles ---------- */
-
-.bubble {
-  padding: var(--bubble-pad-y) var(--bubble-pad-x);
-  border-radius: 20px;
-  font-size: var(--bubble-font);
-  line-height: var(--bubble-line);
-  white-space: pre-wrap;
-  word-break: break-word;
-  box-shadow: var(--bubble-shadow);
-}
-
-.bubble-user {
-  max-width: 78%;
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-.bubble-assistant {
-  max-width: 82%;
-  min-width: 0;
-  background: var(--bubble-assistant-bg);
-  color: var(--text);
-}
-
-.markdown strong { font-weight: 600; }
-.markdown em { font-style: italic; }
-
-@media (min-width: 768px) {
-  :root { --bubble-font: 16.5px; }
-}
-
-/* ---------- Assistant row (avatar + bubble) ---------- */
-
-.assistant {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-}
-
-.assistant-mark {
-  flex-shrink: 0;
-  /* Same height as a single-line bubble, top-aligned, so the avatar and a
-     one-line reply are exactly the same size and edge-to-edge. */
-  width: var(--bubble-1line);
-  height: var(--bubble-1line);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-family: var(--font-serif);
-  font-size: calc(var(--bubble-1line) * 0.45);
-  line-height: 1;
-  user-select: none;
-}
-
-/* ---------- Loading dots ---------- */
-
-.loading-dots {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  /* One line tall, so the typing bubble matches a single-line text bubble. */
-  height: calc(var(--bubble-font) * var(--bubble-line));
-}
-
-.loading-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  opacity: 0.4;
-  animation: dot-pulse 1.2s ease-in-out infinite;
-}
-
-.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes dot-pulse {
-  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
-  30%           { opacity: 0.9;  transform: translateY(-3px); }
-}
-
-/* ============================================================
-   Input bar
-   ============================================================ */
-
-.input-bar {
-  left: 0;
-  right: 0;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  /* Shared by both states. A different horizontal inset per state resizes the
-     field the instant the class swaps, which no amount of layout animation can
-     smooth over — so only the vertical padding differs below. */
-  padding-left: 20px;
-  padding-right: 20px;
-  z-index: 20;
-}
-
-.input-bar-hero {
-  position: absolute;
-  top: 55%;
-}
-
-.input-bar-fixed {
-  position: fixed;
-  bottom: 0;
-  padding-top: 12px;
-  padding-bottom: calc(20px + env(safe-area-inset-bottom));
-}
-
-/* Dissolve scrolled messages into the page above the docked bar, so the bar
-   sits in the background instead of overlapping it with a hard edge. */
-.input-bar-fixed::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 100%;
-  height: 48px;
-  /* A flat --bg shaped by a mask, not a gradient between two colour tokens:
-     background-image can't be transitioned, so a gradient would snap mid-fade
-     while every other surface eased across. */
-  background: var(--bg);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black);
-  mask-image: linear-gradient(to bottom, transparent, black);
-  pointer-events: none;
-}
-
-.input-bar-fixed::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  z-index: -1;
-}
-
-/* No `gap` — the new-chat button animates its own margin open and shut, and a
-   gap would hold its 10px even at zero width, leaving a notch mid-collapse. */
-.input-row {
-  display: flex;
-  align-items: flex-end;
-}
-
-/* Recessed surface — a tinted dip in the page. Deliberately no shadow and no
-   backdrop blur: nothing scrolls under it now that the bar is opaque. */
-.surface {
-  background: var(--surface-bg);
-  border: 1px solid var(--surface-border);
-  transition: background-color 0.25s ease, border-color 0.25s ease;
-}
-
-.input-field {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  border-radius: 24px;
-  padding: 8px 8px 8px 20px;
-}
-
-.input-field:focus-within {
-  background: var(--surface-bg-focus);
-  border-color: var(--surface-border-focus);
-}
-
-.input-textarea {
-  flex: 1;
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--text);
-  resize: none;
-  background: transparent;
-  max-height: 120px;
-  padding: 4px 0;
-}
-
-.input-textarea::placeholder { color: var(--text-tertiary); }
-
-.send-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--field-idle);
-  color: var(--icon-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.send-btn-active {
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-.new-chat-btn {
-  height: 48px;
-  border-radius: 24px;
-  flex-shrink: 0;
-  color: var(--icon-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Width is driven by the mount/unmount animation; clip the icon as it closes. */
-  overflow: hidden;
-}
-
-@media (hover: hover) {
-  .new-chat-btn:hover {
-    background: var(--surface-bg-focus);
-    border-color: var(--surface-border-focus);
-    color: var(--text-secondary);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-
-  .theme-toggle:hover { color: var(--text-secondary); }
-}
-
-/* ============================================================
-   Theme toggle
-   ============================================================ */
-
-/* Bare mark — no button chrome. Sits in the corner as a glyph, not a control. */
-.theme-toggle {
-  position: fixed;
-  right: 22px;
-  bottom: calc(22px + env(safe-area-inset-bottom));
-  z-index: 30;
-  padding: 6px;
-  color: var(--icon-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.25s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Once a conversation starts the docked input bar owns the bottom edge. On
-   viewports too narrow to have a side gutter, lift the toggle clear of it. */
-@media (max-width: 860px) {
-  .app-chatting .theme-toggle {
-    bottom: calc(84px + env(safe-area-inset-bottom));
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 }
 
-/* Cross-fade the whole palette, but only while a switch is in flight — a
-   standing universal transition would smear every other colour change.
-   Symmetric ease-in-out so the fade starts and lands gently instead of
-   snapping off the mark; fill/stroke carry the SVG icons along with it.
-   Duration mirrors FADE_MS in hooks/useTheme.ts. */
-:root.theming,
-:root.theming *,
-:root.theming *::before,
-:root.theming *::after {
-  transition-property: background-color, border-color, color, box-shadow, fill,
-    stroke, outline-color, text-decoration-color !important;
+/* ---------- Composer ----------
+   ChatGPT's shape: a flat pill — a solid fill one step off the page, hairline edge, round send button
+   inset on the right. Nothing else: no shadow, no focus ring or tint. The
+   radius is half the one-line height, so one line is a true pill and longer
+   drafts become a rounded rectangle. Styles PromptInput's InputGroup without
+   editing the vendored component. */
+@property --composer-bg { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --composer-edge { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
+:root {
+  --composer-bg: var(--base-50);
+  --composer-edge: var(--base-100);
+}
+
+:root[data-theme='dark'] {
+  --composer-bg: var(--base-900);
+  --composer-edge: var(--base-850);
+}
+
+.composer [data-slot='input-group'] {
+  align-items: flex-end;
+  border-radius: 26px;
+  border-color: var(--composer-edge) !important;
+  background: var(--composer-bg) !important;
+  box-shadow: none !important;
+  /* InputGroup dims itself (has-disabled:opacity-50) whenever it holds a
+     disabled control — here, the send button on an empty draft. The bar should
+     look the same empty or not. */
+  opacity: 1 !important;
+}
+
+.composer [data-slot='input-group-control'] {
+  font-size: 16px; /* below 16px, iOS Safari zooms on focus */
+  line-height: 24px;
+  padding-left: 1.25rem;
+}
+
+/* 36px circle, 8px in from the edge: centred on one line, and pinned to the
+   bottom-right corner once the draft grows. */
+.composer-send {
+  flex-shrink: 0;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  margin: 0 0.5rem 0.5rem 0;
+  border-radius: 9999px !important;
+}
+
+.composer-send:disabled {
+  opacity: 0.3 !important;
+}
+
+/* ---------- Loading state (beautifului.dev "Dots") ---------- */
+@keyframes pixel-on {
+  0%, 100% { opacity: 0.15; }
+  18%, 42% { opacity: 1; }
+}
+
+@keyframes shimmer-text {
+  0% { background-position: 150%; }
+  100% { background-position: -50%; }
+}
+
+/* ---------- Theme cross-fade ----------
+   Only while a switch is in flight. Only the registered tokens on <html>
+   transition; every element's own transitions are suspended meanwhile, or each
+   would chase the moving tokens a step behind. Duration mirrors FADE_MS in
+   hooks/useTheme.ts. */
+:root.theming {
+  transition-property: --background, --foreground, --card, --card-foreground,
+    --popover, --popover-foreground, --primary, --primary-foreground,
+    --secondary, --secondary-foreground, --muted, --muted-foreground, --accent,
+    --accent-foreground, --destructive, --border, --input, --ring,
+    --composer-bg, --composer-edge !important;
   transition-duration: 0.5s !important;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
+:root.theming *,
+:root.theming *::before,
+:root.theming *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :root.theming,
-  :root.theming *,
-  :root.theming *::before,
-  :root.theming *::after {
-    transition: none !important;
-  }
+  :root.theming { transition: none !important; }
+  .loading-dot, .shimmer-text { animation: none !important; }
 }

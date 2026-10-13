@@ -22,7 +22,8 @@ const currentTheme = (): Theme =>
 /**
  * The status bar tint has to track the page, and the source of truth for the
  * page colour is `--bg` in index.css — so read it back rather than duplicating
- * the hex here.
+ * the hex here. `--bg` is itself transitioned during a switch, so this runs
+ * once the fade is over; mid-fade it would read the old colour.
  */
 const syncThemeColor = () => {
   const bg = getComputedStyle(document.documentElement)
@@ -51,13 +52,15 @@ export const useTheme = () => {
     void root.offsetHeight
     root.dataset.theme = next
     setTheme(next)
-    syncThemeColor()
     // Restart the window on every switch — without this, toggling twice in
     // quick succession lets the first timer strip `.theming` partway through
     // the second fade, and the palette jumps the rest of the way.
     window.clearTimeout(fadeTimer.current)
     fadeTimer.current = window.setTimeout(
-      () => root.classList.remove('theming'),
+      () => {
+        root.classList.remove('theming')
+        syncThemeColor()
+      },
       FADE_MS + FADE_GRACE_MS
     )
   }, [])
