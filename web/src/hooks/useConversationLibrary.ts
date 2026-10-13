@@ -126,24 +126,51 @@ export const useConversationLibrary = () => {
     }
   }, [activate])
 
-  /** Opens the system folder picker. Must be called from a click. */
-  const chooseFolder = useCallback(async () => {
+  /**
+   * Opens the system folder picker. Must be called from a click. `startIn`
+   * lets reconnect open it on the folder that was linked before.
+   */
+  const chooseFolder = useCallback(async (startIn: FileSystemHandle | 'documents' = 'documents') => {
     try {
-      const dir = await window.showDirectoryPicker!({ id: 'delphi', mode: 'readwrite', startIn: 'documents' })
+      const dir = await window.showDirectoryPicker!({ id: 'delphi', mode: 'readwrite', startIn })
       await saveDirHandle(dir)
       await activate(dir)
     } catch (err) {
+      const name = (err as Error).name
       // Closing the picker is a choice, not an error.
-      if ((err as Error).name !== 'AbortError') throw err
+      if (name === 'AbortError') return
+      // After a "Don't allow" in reconnect, Chrome may not grant a second
+      // dialog from the same click. The user just said no; leave it there.
+      if (name === 'SecurityError' || name === 'NotAllowedError') {
+        console.warn('Folder picker unavailable:', err)
+        return
+      }
+      throw err
     }
   }, [activate])
 
-  /** Re-grants access to the remembered folder. Must be called from a click. */
+  /**
+   * Re-grants access to the remembered folder. Must be called from a click.
+   *
+   * Chrome doesn't always show a prompt: a permission dismissed or denied
+   * earlier can come back "denied" at once, and a folder moved or deleted
+   * since makes the call throw. Either way a click must still lead somewhere,
+   * so anything short of "granted" opens the folder picker instead — on the
+   * old folder when it still exists — to choose it (or another) again.
+   */
   const reconnect = useCallback(async () => {
     const dir = dirRef.current
-    if (!dir) return
-    if ((await dir.requestPermission(READWRITE)) === 'granted') await activate(dir)
-  }, [activate])
+    if (!dir) return chooseFolder()
+    let state: PermissionState | 'missing'
+    try {
+      state = await dir.requestPermission(READWRITE)
+    } catch (err) {
+      console.warn('Could not re-request folder access:', err)
+      state = 'missing'
+    }
+    if (state === 'granted') return activate(dir)
+    return chooseFolder(state === 'missing' ? 'documents' : dir)
+  }, [activate, chooseFolder])
 
   /** Stops saving to the folder. The files in it are left as they are. */
   const unlink = forget

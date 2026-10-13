@@ -1,8 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 
-/** At most this share of the message area is runway below the last line. */
-const MAX_SHARE = 0.4
+/**
+ * At most this share of the message area is runway below the last line: the
+ * newest line rests a little below the middle on a computer, lower on a phone,
+ * where the screen is short and the composer already sits near the thumb.
+ */
+const maxShare = () => (window.matchMedia('(pointer: coarse)').matches ? 0.2 : 0.4)
 
 /**
  * "Scroll past end": room below the last message, so that once a conversation
@@ -10,7 +14,7 @@ const MAX_SHARE = 0.4
  * of against the composer. The Conversation keeps following the bottom while a
  * reply streams, which holds that line at the same height as text arrives.
  *
- * The runway equals how far the messages overflow, capped at MAX_SHARE of the
+ * The runway equals how far the messages overflow, capped at maxShare() of the
  * viewport — so a conversation that fits gets none (nothing scrolls), and the
  * last line eases up to its resting place as the content grows rather than
  * jumping there the moment it overflows.
@@ -34,7 +38,7 @@ export const ScrollPastEnd = () => {
       // resizing it can't feed back into the next measurement.
       const messages = spacer.getBoundingClientRect().top - content.getBoundingClientRect().top
       const viewport = scroller.clientHeight
-      const runway = Math.min(Math.max(messages - viewport, 0), viewport * MAX_SHARE)
+      const runway = Math.min(Math.max(messages - viewport, 0), viewport * maxShare())
       spacer.style.height = `${Math.round(runway)}px`
     }
 

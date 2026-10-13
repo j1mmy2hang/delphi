@@ -6,11 +6,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from '@/components/ai-elements/message'
+import { Message, MessageContent } from '@/components/ai-elements/message'
 import {
   PromptInput,
   PromptInputSubmit,
@@ -26,6 +22,7 @@ import { ReplyFailure } from './components/ReplyFailure'
 import { isSaveStatusOmitted, SaveStatus } from './components/SaveStatus'
 import { ScrollEdge } from './components/ScrollEdge'
 import { ScrollPastEnd } from './components/ScrollPastEnd'
+import { StreamingReply } from './components/StreamingReply'
 import { ThemeToggle } from './components/ThemeToggle'
 import { EASE_IN, EASE_OUT, FLOATING_BUTTON, SPRING_GLIDE } from './constants'
 import { useChatStream } from './hooks/useChatStream'
@@ -35,17 +32,6 @@ import { localISO, titleFrom } from './storage/conversationFile'
 import type { Message as ChatMessage } from './types'
 import { newId } from './utils/id'
 import { stripAngleTags } from './utils/markdown'
-
-// Per-word fade for a streaming reply. The stagger spaces words out; the
-// backlog cap lets a fast stream run ahead of it rather than fall behind.
-const STREAM_ANIMATION = {
-  animation: 'fadeIn',
-  duration: 220,
-  easing: 'ease-out',
-  sep: 'word',
-  stagger: 18,
-  maxBacklogMs: 400,
-} as const
 
 function App() {
   const [input, setInput] = useState('')
@@ -98,11 +84,33 @@ function App() {
     const trimmed = input.trim()
     if (!trimmed) return
     setInput('')
-    if (!meta) setMeta({ id: newId(), created: localISO() })
+    if (!meta) {
+      setMeta({ id: newId(), created: localISO() })
+      setOpenedCount(null)
+    }
     send(trimmed)
   }
 
+  // How many messages came from a saved file when it was opened (null for a
+  // conversation started here). Those enter as a cascade, not as live turns.
+  const [openedCount, setOpenedCount] = useState<number | null>(null)
+
+  /**
+   * When each message fades in. Live: the opening exchange waits for the hero
+   * to clear, later turns appear at once, and a reply trails its question.
+   * Opened from history: strictly top to bottom. It opens scrolled to its end,
+   * so only the last few on screen cascade; the ones above appear at once.
+   */
+  const entranceDelay = (i: number, role: ChatMessage['role']) => {
+    if (openedCount !== null && i < openedCount) {
+      const firstInCascade = Math.max(0, openedCount - 8)
+      return 0.08 + Math.max(0, i - firstInCascade) * 0.05
+    }
+    return (i < 2 ? 0.12 : 0) + (role === 'assistant' ? 0.12 : 0)
+  }
+
   const handleNewChat = () => {
+    setOpenedCount(null)
     reset()
     setInput('')
     setMeta(null)
@@ -121,6 +129,7 @@ function App() {
     if (!conversation) return
     savedRef.current = { messages: conversation.messages, generation }
     setMeta({ id: conversation.id, created: conversation.created, title: conversation.title })
+    setOpenedCount(conversation.messages.length)
     load(conversation.messages)
     setInput('')
   }
@@ -141,7 +150,7 @@ function App() {
           currentId={meta?.id ?? null}
           onSelect={handleOpen}
           onDelete={handleDelete}
-          onChangeFolder={library.chooseFolder}
+          onChangeFolder={() => library.chooseFolder()}
           onUnlink={library.unlink}
         />
       )}
@@ -225,9 +234,7 @@ function App() {
                       message.role === 'assistant'
                         ? stripAngleTags(message.content)
                         : message.content
-                    // The opening exchange waits for the hero to clear; later
-                    // turns appear at once. A reply trails its question slightly.
-                    const delay = (i < 2 ? 0.12 : 0) + (message.role === 'assistant' ? 0.12 : 0)
+                    const delay = entranceDelay(i, message.role)
                     return (
                       <motion.div
                         key={i}
@@ -242,18 +249,10 @@ function App() {
                             ) : (
                               <>
                                 {text && (
-                                  <MessageResponse
-                                    // Tokens arrive in uneven bursts; Streamdown
-                                    // queues new words and fades each in on a
-                                    // steady stagger, so a burst plays out as a
-                                    // flow instead of landing as one block. Only
-                                    // the reply being written animates — opening
-                                    // a saved conversation shows it as it is.
-                                    animated={STREAM_ANIMATION}
-                                    isAnimating={isStreaming && i === messages.length - 1}
-                                  >
-                                    {text}
-                                  </MessageResponse>
+                                  <StreamingReply
+                                    text={text}
+                                    streaming={isStreaming && i === messages.length - 1}
+                                  />
                                 )}
                                 {message.error ? (
                                   <ReplyFailure
@@ -357,7 +356,7 @@ function App() {
                 status={library.status}
                 folderName={library.folderName}
                 chatStarted={chatStarted}
-                onChooseFolder={library.chooseFolder}
+                onChooseFolder={() => library.chooseFolder()}
                 onReconnect={library.reconnect}
                 onOpenHistory={() => toggleHistory(true)}
               />

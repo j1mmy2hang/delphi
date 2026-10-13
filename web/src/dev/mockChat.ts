@@ -32,6 +32,8 @@ const sleep = (ms: number, signal?: AbortSignal) =>
  *   /fail network | interrupted | rate_limited | daily_limit | monthly_limit
  *   /fail message_too_long | conversation_too_long | unauthorized
  *   /fail unavailable | upstream_error
+ * And `/burst` delivers the whole reply in one chunk — what a phone on a
+ * buffering connection can see — to check the reply still unfolds smoothly.
  */
 const simulateFailure = (code: string): Response | 'network' | 'interrupted' => {
   if (code === 'network' || code === 'interrupted') return code
@@ -69,7 +71,9 @@ export const mockChatFetch = async (
   history: { role: string; content: string }[],
   signal?: AbortSignal,
 ): Promise<Response> => {
-  const fail = /^\/fail\s+(\S+)/.exec(history.at(-1)?.content ?? '')?.[1]
+  const last = history.at(-1)?.content ?? ''
+  const burst = last.startsWith('/burst')
+  const fail = /^\/fail\s+(\S+)/.exec(last)?.[1]
   const simulated = fail ? simulateFailure(fail) : null
   if (simulated === 'network') {
     await sleep(600, signal)
@@ -93,7 +97,7 @@ export const mockChatFetch = async (
         // An interrupted reply breaks off a third of the way in.
         const end = simulated === 'interrupted' ? Math.floor(words.length / 3) : words.length
         for (let i = 0; i < end; ) {
-          const size = 1 + Math.floor(Math.random() * 12)
+          const size = burst ? words.length : 1 + Math.floor(Math.random() * 12)
           const chunk = words.slice(i, i + size).join('')
           i += size
           const event = { choices: [{ delta: { content: chunk } }] }
