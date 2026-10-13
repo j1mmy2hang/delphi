@@ -8,8 +8,12 @@ import { dirname, resolve } from "node:path"
 // Tunables — everything you'd want to adjust lives here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The OpenRouter model. Cheaper models here = lower cost per message. */
-const MODEL = "anthropic/claude-sonnet-4.6"
+/**
+ * The OpenRouter model. Cheaper models here = lower cost per message. The "~"
+ * prefix is OpenRouter's moving alias: it always resolves to the newest Claude
+ * Sonnet, so upgrades arrive without a code change.
+ */
+const MODEL = "~anthropic/claude-sonnet-latest"
 
 /** Hard cap on tokens the model may generate per reply. Bounds cost per call. */
 const MAX_OUTPUT_TOKENS = 1200
@@ -33,6 +37,15 @@ const PAID_BUDGET_USD = Number(Netlify.env.get("PAID_BUDGET_USD") ?? "2")
  * so for an indie app this is an acceptable trade vs. full server-side receipt
  * verification. HARDENING HOOK: verify a subscription JWS here if abuse appears.
  */
+/**
+ * The public (web) allowance: per IP, per UTC day. The web app sends no device
+ * id, so the IP is the only handle on a visitor; a daily window lets a real
+ * person come back tomorrow instead of being locked out for the month. The
+ * native app identifies itself with X-Device-Id and keeps the monthly,
+ * per-device tiers above.
+ */
+const DAILY_IP_BUDGET_USD = Number(Netlify.env.get("DAILY_IP_BUDGET_USD") ?? "0.5")
+
 const budgetFor = (req: Request): number =>
   req.headers.get("x-tier") === "paid" ? PAID_BUDGET_USD : FREE_BUDGET_USD
 
@@ -41,7 +54,7 @@ const budgetFor = (req: Request): number =>
  * cost for a request. Keep roughly in line with the chosen model so metering
  * never silently reads $0. These are ceilings, not exact.
  */
-const FALLBACK_PRICE_PER_MTOK = { input: 3, output: 15 }
+const FALLBACK_PRICE_PER_MTOK = { input: 2, output: 10 }
 
 /** Input guards — reject abusive / runaway conversations before they cost money. */
 const MAX_MESSAGES = 40 // turns in a single request
@@ -88,6 +101,27 @@ const loadSystemPrompt = (): string => {
 
 const SYSTEM_PROMPT = loadSystemPrompt()
 
+/** Set by `netlify dev` (and only there), so this is false on the live site. */
+const IS_LOCAL_DEV = Netlify.env.get("NETLIFY_DEV") === "true"
+
+let lastDevPrompt = SYSTEM_PROMPT
+
+/**
+ * Deployed, the prompt is read once per function instance. Locally it's re-read
+ * on every request, so an edit to system-prompt.md applies to the next message
+ * sent — no restart. The function file itself isn't touched by that edit, so
+ * `netlify dev` wouldn't otherwise reload it.
+ */
+const systemPrompt = (): string => {
+  if (!IS_LOCAL_DEV) return SYSTEM_PROMPT
+  const current = loadSystemPrompt()
+  if (current !== lastDevPrompt) {
+    console.log("[dev] system-prompt.md changed — using the new version")
+    lastDevPrompt = current
+  }
+  return current
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Small helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,8 +134,29 @@ const jsonResponse = (body: unknown, status: number, extraHeaders?: Record<strin
     headers: { "Content-Type": "application/json", ...extraHeaders },
   })
 
-const jsonError = (message: string, status: number, extraHeaders?: Record<string, string>) =>
-  jsonResponse({ error: message }, status, extraHeaders)
+/**
+ * Every error carries a stable `code` for clients to branch on, beside a
+ * readable `error` message. Clients show their own wording per code; `error`
+ * is for logs and curl.
+ */
+type ErrorCode =
+  | "method_not_allowed"
+  | "unauthorized"
+  | "rate_limited"
+  | "daily_limit"
+  | "monthly_limit"
+  | "unavailable"
+  | "invalid_request"
+  | "message_too_long"
+  | "conversation_too_long"
+  | "upstream_error"
+
+const jsonError = (
+  code: ErrorCode,
+  message: string,
+  status: number,
+  extra?: { body?: Record<string, unknown>; headers?: Record<string, string> },
+) => jsonResponse({ error: message, code, ...extra?.body }, status, extra?.headers)
 
 /** Constant-time string compare so the token check can't be timed. */
 const safeEqual = (a: string, b: string): boolean => {
@@ -116,10 +171,6 @@ const clientIp = (req: Request): string =>
   req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
   "unknown"
 
-/** Stable per-user id: the app's Keychain device id, else fall back to IP. */
-const deviceId = (req: Request, ip: string): string =>
-  req.headers.get("x-device-id")?.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 64) || `ip:${ip}`
-
 /** Current UTC month bucket, e.g. "2026-07". */
 const monthKey = (): string => {
   const d = new Date()
@@ -130,6 +181,15 @@ const monthKey = (): string => {
 const nextResetEpoch = (): number => {
   const d = new Date()
   return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000)
+}
+
+/** Current UTC day bucket, e.g. "2026-10-13". */
+const dayKey = (): string => new Date().toISOString().slice(0, 10)
+
+/** Epoch seconds at which the daily allowance resets (next UTC midnight). */
+const nextDayResetEpoch = (): number => {
+  const d = new Date()
+  return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) / 1000)
 }
 
 /**
@@ -151,25 +211,25 @@ const isAuthorized = (req: Request): boolean => {
 /** Validate & normalize the client payload. Rejects anything oversized or malformed. */
 const validateMessages = (
   input: unknown,
-): { ok: true; messages: ChatMessage[] } | { ok: false; error: string } => {
-  if (!Array.isArray(input)) return { ok: false, error: "`messages` must be an array" }
-  if (input.length === 0) return { ok: false, error: "`messages` is empty" }
-  if (input.length > MAX_MESSAGES) return { ok: false, error: "too many messages" }
+): { ok: true; messages: ChatMessage[] } | { ok: false; code: ErrorCode; error: string } => {
+  if (!Array.isArray(input)) return { ok: false, code: "invalid_request", error: "`messages` must be an array" }
+  if (input.length === 0) return { ok: false, code: "invalid_request", error: "`messages` is empty" }
+  if (input.length > MAX_MESSAGES) return { ok: false, code: "conversation_too_long", error: "too many messages" }
 
   let total = 0
   const clean: ChatMessage[] = []
   for (const m of input) {
-    if (typeof m !== "object" || m === null) return { ok: false, error: "malformed message" }
+    if (typeof m !== "object" || m === null) return { ok: false, code: "invalid_request", error: "malformed message" }
     const { role, content } = m as Record<string, unknown>
     // Only user/assistant allowed — the client can never inject a `system` role
     // and hijack the prompt.
-    if (role !== "user" && role !== "assistant") return { ok: false, error: "invalid role" }
-    if (typeof content !== "string") return { ok: false, error: "invalid content" }
-    if (content.length > MAX_CHARS_PER_MESSAGE) return { ok: false, error: "a message is too long" }
+    if (role !== "user" && role !== "assistant") return { ok: false, code: "invalid_request", error: "invalid role" }
+    if (typeof content !== "string") return { ok: false, code: "invalid_request", error: "invalid content" }
+    if (content.length > MAX_CHARS_PER_MESSAGE) return { ok: false, code: "message_too_long", error: "a message is too long" }
     total += content.length
     clean.push({ role, content })
   }
-  if (total > MAX_TOTAL_CHARS) return { ok: false, error: "conversation too long" }
+  if (total > MAX_TOTAL_CHARS) return { ok: false, code: "conversation_too_long", error: "conversation too long" }
   return { ok: true, messages: clean }
 }
 
@@ -198,11 +258,23 @@ const checkBurst = async (ip: string): Promise<{ ok: true } | { ok: false; retry
   }
 }
 
-const spendKey = (device: string) => `${device}:${monthKey()}`
+/**
+ * Which allowance a request draws on: the native app's monthly budget per
+ * device, or the web's daily budget per IP. `key` names its spend record.
+ */
+type Allowance = { kind: "monthly" | "daily"; key: string; budget: number; resetAt: number }
 
-const getSpend = async (device: string): Promise<number> => {
+const allowanceFor = (req: Request, ip: string): Allowance => {
+  const device = req.headers.get("x-device-id")?.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 64)
+  if (device) {
+    return { kind: "monthly", key: `${device}:${monthKey()}`, budget: budgetFor(req), resetAt: nextResetEpoch() }
+  }
+  return { kind: "daily", key: `web:${ip}:${dayKey()}`, budget: DAILY_IP_BUDGET_USD, resetAt: nextDayResetEpoch() }
+}
+
+const getSpend = async (key: string): Promise<number> => {
   try {
-    const v = (await getStore("spend").get(spendKey(device), { type: "json" })) as
+    const v = (await getStore("spend").get(key, { type: "json" })) as
       | { usd: number }
       | null
     return v?.usd ?? 0
@@ -212,11 +284,10 @@ const getSpend = async (device: string): Promise<number> => {
   }
 }
 
-const addSpend = async (device: string, usd: number): Promise<void> => {
+const addSpend = async (key: string, usd: number): Promise<void> => {
   if (!(usd > 0)) return
   try {
     const store = getStore("spend")
-    const key = spendKey(device)
     const cur = (await store.get(key, { type: "json" })) as { usd: number } | null
     await store.setJSON(key, { usd: (cur?.usd ?? 0) + usd })
   } catch (err) {
@@ -255,11 +326,12 @@ const extractCost = (sseTail: string): number | null => {
 
 /**
  * Pass the upstream stream straight through to the client while sniffing the
- * tail for the usage chunk, then bill the device once the stream completes.
+ * tail for the usage chunk, then bill the allowance once the stream completes.
+ * A null key (local dev) streams without billing.
  */
 const meteredPassthrough = (
   upstreamBody: ReadableStream<Uint8Array>,
-  device: string,
+  spendKey: string | null,
 ): ReadableStream<Uint8Array> => {
   const decoder = new TextDecoder()
   let buffer = ""
@@ -270,8 +342,9 @@ const meteredPassthrough = (
       controller.enqueue(chunk)
     },
     async flush() {
+      if (!spendKey) return
       const cost = extractCost(buffer)
-      await addSpend(device, cost ?? 0)
+      await addSpend(spendKey, cost ?? 0)
     },
   })
   return upstreamBody.pipeThrough(transform)
@@ -282,44 +355,53 @@ const meteredPassthrough = (
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default async (req: Request, _context: Context) => {
-  if (req.method !== "POST") return jsonError("Method not allowed", 405)
+  if (req.method !== "POST") return jsonError("method_not_allowed", "Method not allowed", 405)
 
-  if (!isAuthorized(req)) return jsonError("Unauthorized", 401)
+  if (!isAuthorized(req)) return jsonError("unauthorized", "Unauthorized", 401)
 
   const ip = clientIp(req)
-  const device = deviceId(req, ip)
+  const allowance = allowanceFor(req, ip)
 
-  // Anti-abuse burst limit.
-  const burst = await checkBurst(ip)
-  if (!burst.ok) {
-    return jsonError("Too many requests. Please slow down.", 429, {
-      "Retry-After": String(burst.retryAfter),
-    })
-  }
+  // Local `netlify dev` runs unmetered: no burst limit, no allowance, nothing
+  // recorded — testing shouldn't spend down a budget or trip the throttle.
+  if (!IS_LOCAL_DEV) {
+    // Anti-abuse burst limit.
+    const burst = await checkBurst(ip)
+    if (!burst.ok) {
+      return jsonError("rate_limited", "Too many requests. Please slow down.", 429, {
+        body: { retryAfter: burst.retryAfter },
+        headers: { "Retry-After": String(burst.retryAfter) },
+      })
+    }
 
-  // Monthly budget for this device's tier. Distinct shape ({ error:"limit",
-  // resetAt }) so the app can show the "you've hit your limit, it resets on …"
-  // window (and, for free users, offer the upgrade).
-  const spent = await getSpend(device)
-  if (spent >= budgetFor(req)) {
-    return jsonResponse({ error: "limit", resetAt: nextResetEpoch() }, 429, { "X-Limit": "monthly" })
+    // The allowance for this caller. `error: "limit"` and `resetAt` are what
+    // the iOS app reads to show its "you've hit your limit, it resets on …"
+    // window; `code` tells the web which window it was.
+    const spent = await getSpend(allowance.key)
+    if (spent >= allowance.budget) {
+      return jsonResponse(
+        { error: "limit", code: `${allowance.kind}_limit`, resetAt: allowance.resetAt },
+        429,
+        { "X-Limit": allowance.kind },
+      )
+    }
   }
 
   const apiKey = Netlify.env.get("OPENROUTER_API_KEY")
   if (!apiKey) {
     console.error("OPENROUTER_API_KEY not configured")
-    return jsonError("Service unavailable", 503)
+    return jsonError("unavailable", "Service unavailable", 503)
   }
 
   let body: unknown
   try {
     body = await req.json()
   } catch {
-    return jsonError("Invalid JSON", 400)
+    return jsonError("invalid_request", "Invalid JSON", 400)
   }
 
   const validated = validateMessages((body as { messages?: unknown })?.messages)
-  if (!validated.ok) return jsonError(validated.error, 400)
+  if (!validated.ok) return jsonError(validated.code, validated.error, 400)
 
   let upstream: Response
   try {
@@ -336,22 +418,35 @@ export default async (req: Request, _context: Context) => {
         stream: true,
         max_tokens: MAX_OUTPUT_TOKENS,
         usage: { include: true }, // ask OpenRouter to report cost in the stream
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...validated.messages],
+        messages: [
+          {
+            role: "system",
+            // Prompt caching: the system prompt is the same for every user, so
+            // Anthropic keeps it cached (5 minutes, refreshed on each hit) and
+            // bills re-reads at 10% of the input price. A write costs 1.25×,
+            // so only the first request after a quiet spell pays a little more.
+            // The usage cost OpenRouter reports already reflects this.
+            content: [
+              { type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } },
+            ],
+          },
+          ...validated.messages,
+        ],
       }),
       signal: req.signal,
     })
   } catch (err) {
     console.error("upstream fetch failed:", err)
-    return jsonError("Upstream error", 502)
+    return jsonError("upstream_error", "Upstream error", 502)
   }
 
   if (!upstream.ok || !upstream.body) {
     // Log the real reason; never leak upstream error bodies to the client.
     console.error("openrouter error:", upstream.status, await upstream.text().catch(() => ""))
-    return jsonError("The oracle is unavailable right now.", 502)
+    return jsonError("upstream_error", "The model provider returned an error.", 502)
   }
 
-  return new Response(meteredPassthrough(upstream.body, device), {
+  return new Response(meteredPassthrough(upstream.body, IS_LOCAL_DEV ? null : allowance.key), {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
