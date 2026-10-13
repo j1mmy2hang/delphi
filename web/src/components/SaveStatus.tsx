@@ -50,7 +50,7 @@ export const SaveStatus = ({
       case 'needs-permission':
         return {
           label: 'Not saved · Reconnect',
-          hint: `Allow access to “${folderName}” again to keep saving there.`,
+          hint: `Choose “${folderName}” again to keep saving there.`,
           onClick: onReconnect,
         }
       case 'none':

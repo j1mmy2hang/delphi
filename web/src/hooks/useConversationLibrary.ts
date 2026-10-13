@@ -118,13 +118,24 @@ export const useConversationLibrary = () => {
       if (!dir) return setStatus('none')
       setFolderName(dir.name)
       dirRef.current = dir
-      if ((await dir.queryPermission(READWRITE)) === 'granted') await activate(dir)
+      let state: PermissionState
+      try {
+        state = await dir.queryPermission(READWRITE)
+      } catch (err) {
+        // The folder is gone (moved or deleted): start over rather than sit
+        // in 'loading' with no status to click.
+        console.warn('Linked folder unavailable:', err)
+        if (!cancelled) await forget()
+        return
+      }
+      if (cancelled) return
+      if (state === 'granted') await activate(dir)
       else setStatus('needs-permission')
     })()
     return () => {
       cancelled = true
     }
-  }, [activate])
+  }, [activate, forget])
 
   /**
    * Opens the system folder picker. Must be called from a click. `startIn`
@@ -152,24 +163,33 @@ export const useConversationLibrary = () => {
   /**
    * Re-grants access to the remembered folder. Must be called from a click.
    *
-   * Chrome doesn't always show a prompt: a permission dismissed or denied
-   * earlier can come back "denied" at once, and a folder moved or deleted
-   * since makes the call throw. Either way a click must still lead somewhere,
-   * so anything short of "granted" opens the folder picker instead — on the
-   * old folder when it still exists — to choose it (or another) again.
+   * Through the folder picker, opened on that folder — not Chrome's "allow
+   * again?" prompt (requestPermission). Arc and Dia don't show that prompt:
+   * the request goes unanswered or is refused unseen, and either way the click
+   * that could have opened anything is spent. Choosing the folder in the picker
+   * grants access in every Chromium browser, and it's the one step every one
+   * of them already handles (it's how the folder was linked to begin with).
+   *
+   * The permission is checked first — that needs no click and spends nothing —
+   * so if access was restored meanwhile, saving resumes with no picker at all.
    */
   const reconnect = useCallback(async () => {
     const dir = dirRef.current
     if (!dir) return chooseFolder()
-    let state: PermissionState | 'missing'
     try {
-      state = await dir.requestPermission(READWRITE)
+      if ((await dir.queryPermission(READWRITE)) === 'granted') return activate(dir)
     } catch (err) {
-      console.warn('Could not re-request folder access:', err)
-      state = 'missing'
+      // Folder moved or deleted: the picker starts from Documents instead.
+      console.warn('[reconnect] linked folder unavailable:', err)
+      return chooseFolder()
     }
-    if (state === 'granted') return activate(dir)
-    return chooseFolder(state === 'missing' ? 'documents' : dir)
+    try {
+      await chooseFolder(dir)
+    } catch (err) {
+      // A handle the picker can't start from (the folder went away since).
+      console.warn('[reconnect] could not open the picker on the old folder:', err)
+      await chooseFolder()
+    }
   }, [activate, chooseFolder])
 
   /** Stops saving to the folder. The files in it are left as they are. */
