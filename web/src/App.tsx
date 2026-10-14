@@ -24,10 +24,13 @@ import { ScrollEdge } from './components/ScrollEdge'
 import { ScrollPastEnd } from './components/ScrollPastEnd'
 import { StreamingReply } from './components/StreamingReply'
 import { ThemeToggle } from './components/ThemeToggle'
+import { ThoughtMapButton } from './components/ThoughtMapButton'
+import { ThoughtMapPanel } from './components/ThoughtMapPanel'
 import { EASE_IN, EASE_OUT, FLOATING_BUTTON, SPRING_GLIDE } from './constants'
 import { useChatStream } from './hooks/useChatStream'
 import { useConversationLibrary, type LibraryEntry } from './hooks/useConversationLibrary'
 import { useMobileViewport } from './hooks/useMobileViewport'
+import { useThoughtMap } from './graph/useThoughtMap'
 import { localISO, titleFrom } from './storage/conversationFile'
 import type { Message as ChatMessage } from './types'
 import { newId } from './utils/id'
@@ -54,6 +57,16 @@ function App() {
   const showHistory = library.status === 'ready' && historyOpen
 
   const toggleHistory = (open = !historyOpen) => setHistoryOpen(open)
+
+  // The thought map: drawn beside the chat by a second model, from the user's
+  // side of the conversation. The button lights up when it changes unseen.
+  const map = useThoughtMap(messages, meta?.id ?? null)
+  const [mapOpen, setMapOpen] = useState(false)
+  const [mapSeen, setMapSeen] = useState(0)
+  useEffect(() => {
+    if (mapOpen) setMapSeen(map.version)
+  }, [mapOpen, map.version])
+  const mapFresh = !mapOpen && map.version > mapSeen && map.graph.nodes.length > 0
 
   // Write the question as soon as it's sent, and the reply once it's complete
   // (or stopped) — not on every streamed token. Choosing a folder mid-chat
@@ -114,6 +127,8 @@ function App() {
     reset()
     setInput('')
     setMeta(null)
+    setMapOpen(false)
+    setMapSeen(0)
     savedRef.current = null
   }
 
@@ -154,6 +169,12 @@ function App() {
           onUnlink={library.unlink}
         />
       )}
+      <ThoughtMapPanel
+        open={mapOpen && chatStarted}
+        onClose={() => setMapOpen(false)}
+        map={map}
+        status={map.status}
+      />
       <div className="relative mx-auto flex h-(--app-height,100dvh) min-w-0 flex-1 flex-col overflow-hidden">
         {/* Safe-area insets keep the header clear of the notch (landscape, or
             added to the Home Screen); they're zero on desktop. */}
@@ -192,7 +213,25 @@ function App() {
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="pointer-events-auto ml-auto">
+          <div className="pointer-events-auto ml-auto flex items-center gap-1">
+            {/* Desktop only for now: phones have no room for the panel. */}
+            <AnimatePresence>
+              {chatStarted && (
+                <motion.div
+                  className="pointer-coarse:hidden"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <ThoughtMapButton
+                    open={mapOpen}
+                    fresh={mapFresh}
+                    drawing={map.status === 'drawing'}
+                    onClick={() => setMapOpen((o) => !o)}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
             <ThemeToggle />
           </div>
         </header>

@@ -287,3 +287,32 @@
   .loading-dot, .shimmer-text, [data-sd-animate] { animation: none !important; }
   [data-sd-animate-marker]::marker { animation: none !important; }
 }
+
+/* ---------- Thought map ----------
+   One hue, deepening toward the centre: the surface is ink-grey, each ring in
+   warms, and the core is gold. Depth is the only thing colour says. Tension
+   is the one exception, in red. */
+@property --map-surface { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --map-reaction { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --map-belief { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --map-core { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --map-tension { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --map-ring { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
+:root {
+  --map-surface: var(--base-300);
+  --map-reaction: #da702c;
+  --map-belief: #bc5215;
+  --map-core: #ad8301;
+  --map-tension: #af3029;
+  --map-ring: var(--base-150);
+}
+
+:root[data-theme='dark'] {
+  --map-surface: var(--base-700);
+  --map-reaction: #9d4310;
+  --map-belief: #da702c;
+  --map-core: #d0a215;
+  --map-tension: #d14d41;
+  --map-ring: var(--base-850);
+}
