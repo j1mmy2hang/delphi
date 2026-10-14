@@ -71,7 +71,7 @@ export const HistorySidebar = ({
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {entries.length === 0 ? (
             <p className="px-2 py-1.5 text-sm text-muted-foreground">
-              Your conversations will appear here.
+              Conversations will appear here.
             </p>
           ) : (
             <ul className="flex flex-col gap-0.5">
