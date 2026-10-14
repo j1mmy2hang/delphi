@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Maximize2, Minimize2, X } from 'lucide-react'
+import { Download, Info, Maximize2, Minimize2, X } from 'lucide-react'
 import { EASE_IN, EASE_OUT } from '../constants'
 import { saveRiverCard } from '../river/exportImage'
 import { lanesFor } from '../river/layout'
@@ -272,6 +272,7 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
                 ))}
               </div>
             )}
+            {!empty && <Legend />}
             {empty && (
               <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-16 text-center font-serif text-[15px] text-muted-foreground italic">
                 {status === 'drawing' ? '' : 'As you talk, the shape of your thinking appears here.'}
@@ -279,9 +280,6 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
             )}
           </div>
 
-          <footer className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground">
-            <Legend />
-          </footer>
         </motion.section>
       )}
     </AnimatePresence>
@@ -297,11 +295,11 @@ const KIND_NAME = {
 
 /**
  * How a neighbouring move relates, read with the open move as the subject:
- * this move "answers" what it grew from; what it led to is "answered by" it.
+ * this move "answers" an incoming one; an outgoing one is "answered by" it.
  */
 const RELATION = {
-  'Grew from': { builds: 'builds on', answers: 'answers', challenges: 'challenges' },
-  'Led to': { builds: 'built on by', answers: 'answered by', challenges: 'challenged by' },
+  Incoming: { builds: 'builds on', answers: 'answers', challenges: 'challenges' },
+  Outgoing: { builds: 'built on by', answers: 'answered by', challenges: 'challenged by' },
 } as const
 
 const CARD_WIDTH = 300
@@ -360,8 +358,8 @@ const MoveCard = ({
         </p>
         <h3 className="mt-1 font-serif text-[17px] leading-snug text-foreground">{move.label}</h3>
         {message && <Quote text={said(message)} />}
-        {from.length > 0 && <MoveList title="Grew from" items={from} onSelect={onSelect} />}
-        {to.length > 0 && <MoveList title="Led to" items={to} onSelect={onSelect} />}
+        {from.length > 0 && <MoveList title="Incoming" items={from} onSelect={onSelect} />}
+        {to.length > 0 && <MoveList title="Outgoing" items={to} onSelect={onSelect} />}
       </div>
     </motion.div>
   )
@@ -416,7 +414,6 @@ const MoveList = ({
           >
             <span className="mr-1.5 text-[11px]">{RELATION[title][how]}</span>
             <span className={m.kind === 'realization' ? 'text-(--river-gold)' : 'text-foreground'}>{m.label}</span>
-            <span className="ml-1.5 text-[11px]">{m.by === 'user' ? 'You' : 'Delphi'}</span>
           </button>
         </li>
       ))}
@@ -424,38 +421,36 @@ const MoveList = ({
   </div>
 )
 
+const Key = ({ mark, children }: { mark: ReactNode; children: string }) => (
+  <li className="flex items-center gap-2.5">
+    <svg width="16" height="10" className="shrink-0 overflow-visible" aria-hidden>
+      {mark}
+    </svg>
+    {children}
+  </li>
+)
+
+/**
+ * What the marks mean, out of the way until it's wanted: a small button in
+ * the corner, and the key on hover (or focus, or a tap).
+ */
 const Legend = () => (
-  <>
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="8" height="8" aria-hidden>
-        <circle cx="4" cy="4" r="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      </svg>
-      Question
-    </span>
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="8" height="8" aria-hidden>
-        <circle cx="4" cy="4" r="2.5" fill="currentColor" />
-      </svg>
-      Claim
-    </span>
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="8" height="8" aria-hidden>
-        <rect x="1.5" y="1.5" width="5" height="5" transform="rotate(45 4 4)" fill="currentColor" />
-      </svg>
-      Example
-    </span>
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="10" height="10" aria-hidden>
-        <circle cx="5" cy="5" r="4" fill="var(--river-gold)" />
-      </svg>
-      Realization
-    </span>
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="16" height="6" aria-hidden>
-        <line x1="0" y1="3" x2="16" y2="3" stroke="currentColor" strokeWidth="1.1" strokeDasharray="4 3" />
-      </svg>
-      Challenges
-    </span>
-    <span className="text-muted-foreground/70">Click a move to see what it grew from</span>
-  </>
+  <div className="group absolute bottom-3 left-3 z-20">
+    <button
+      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors group-hover:text-foreground focus-visible:text-foreground"
+      aria-label="Legend"
+    >
+      <Info className="size-4" />
+    </button>
+    <ul className="pointer-events-none absolute bottom-full left-0 mb-1.5 flex w-max translate-y-1 flex-col gap-1.5 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground opacity-0 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.3)] transition duration-150 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100">
+      <Key mark={<circle cx="8" cy="5" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.2" />}>Question</Key>
+      <Key mark={<circle cx="8" cy="5" r="2.5" fill="currentColor" />}>Claim</Key>
+      <Key mark={<rect x="5.5" y="2.5" width="5" height="5" transform="rotate(45 8 5)" fill="currentColor" />}>Example</Key>
+      <Key mark={<circle cx="8" cy="5" r="4.5" fill="var(--river-gold)" />}>Realization</Key>
+      <li className="my-0.5 border-t border-border" aria-hidden />
+      <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.1" />}>Builds on</Key>
+      <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.1" strokeDasharray="4 3" />}>Challenges</Key>
+      <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="var(--river-gold)" strokeWidth="1.4" />}>Leads to a realization</Key>
+    </ul>
+  </div>
 )
