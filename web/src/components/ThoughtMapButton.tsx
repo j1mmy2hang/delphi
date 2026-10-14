@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { SPRING } from '../constants'
+import { buttonVariants } from '@/components/ui/button'
 
 interface ThoughtMapButtonProps {
   open: boolean
@@ -19,20 +19,19 @@ export const ThoughtMapButton = ({ open, fresh, drawing, onClick }: ThoughtMapBu
   return (
     <motion.button
       onClick={onClick}
-      className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground aria-expanded:text-foreground"
-      whileTap={{ scale: 0.9 }}
-      transition={SPRING}
+      // Styled as the header's other buttons (ghost icon Buttons).
+      className={buttonVariants({ variant: 'ghost', size: 'icon' })}
       aria-label={open ? 'Hide thought map' : 'Show thought map'}
       aria-expanded={open}
       title="Thought map"
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <svg className="size-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <motion.ellipse
           cx="12"
           cy="12"
           rx="10"
           ry="8"
-          strokeDasharray="1.5 2.6"
+          strokeDasharray="1 3.6"
           strokeLinecap="round"
           animate={drawing && !reduceMotion ? { rotate: 360 } : { rotate: 0 }}
           transition={drawing ? { duration: 6, repeat: Infinity, ease: 'linear' } : { duration: 0 }}

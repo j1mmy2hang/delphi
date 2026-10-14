@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
+import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { FLOATING_BUTTON, SPRING, SPRING_SOFT } from '../constants'
+import { FLOATING_BUTTON, SPRING_SOFT } from '../constants'
 import { useTheme } from '../hooks/useTheme'
 
 /** Lucide's sun rays, drawn as one group so they retract together. */
@@ -32,18 +33,16 @@ export const ThemeToggle = () => {
   const spring = reduceMotion ? { duration: 0 } : SPRING_SOFT
 
   return (
+    // Styled as the header's other buttons (ghost icon Buttons); a
+    // motion.button only so the icon inside can morph.
     <motion.button
       onClick={toggle}
-      className={cn(
-        "flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground",
-        FLOATING_BUTTON,
-      )}
-      whileTap={{ scale: 0.9 }}
-      transition={SPRING}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), FLOATING_BUTTON)}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
       title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
     >
       <motion.svg
+        className="size-5"
         width="20"
         height="20"
         viewBox="0 0 24 24"
@@ -75,7 +74,7 @@ export const ThemeToggle = () => {
 
         <motion.g
           stroke="currentColor"
-          strokeWidth="1.8"
+          strokeWidth="2"
           strokeLinecap="round"
           style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
           animate={{ opacity: isDark ? 0 : 1, scale: isDark ? 0.4 : 1 }}

@@ -53,11 +53,13 @@ export interface CardText {
 }
 
 export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
-  const width = svg.width.baseVal.value
-  const height = svg.height.baseVal.value
+  const { width, height } = svg.getBoundingClientRect()
   const clone = svg.cloneNode(true) as SVGSVGElement
   resolveStyles(svg, clone)
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  // On screen it fills the panel; as an image it needs its size spelled out.
+  clone.setAttribute('width', String(width))
+  clone.setAttribute('height', String(height))
   const markup = new XMLSerializer().serializeToString(clone)
   const map = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`)
 

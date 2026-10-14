@@ -21,7 +21,13 @@ export const StreamingReply = ({ text, streaming }: { text: string; streaming: b
   const shown = useSmoothText(text, streaming)
   const writing = streaming || shown.length < text.length
   return (
-    <MessageResponse animated={WORD_FADE} isAnimating={writing}>
+    // Delphi speaks in lowercase. Done here rather than asked of the model, so
+    // it never drifts; code keeps its case, since there case is meaning.
+    <MessageResponse
+      className="lowercase [&_code]:normal-case [&_pre]:normal-case"
+      animated={WORD_FADE}
+      isAnimating={writing}
+    >
       {shown}
     </MessageResponse>
   )

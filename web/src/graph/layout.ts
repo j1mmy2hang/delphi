@@ -45,11 +45,18 @@ const turn = (a: number, b: number) => {
 /** Angle of a point on the ellipse, in the ellipse's own (circular) terms. */
 const angleAt = (p: Point, frame: Frame) => Math.atan2(p.y / frame.ry, p.x / frame.rx)
 
-/** A fixed hash, so a node with nothing to go on still gets a stable angle. */
-const hashAngle = (id: string) => {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return ((h % 360) / 360) * TAU
+/**
+ * A fixed hash, so a node with nothing to go on still gets a stable angle; the
+ * seed picks a different arrangement. Mixed well (FNV-1a, then an avalanche
+ * finish), so n1, n2, n3 land far apart rather than in a clump.
+ */
+const hashAngle = (id: string, seed: number) => {
+  let h = (2166136261 ^ seed) >>> 0
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619)
+  h = Math.imul(h ^ (h >>> 16), 2246822507)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  h = (h ^ (h >>> 16)) >>> 0
+  return (h / 2 ** 32) * TAU
 }
 
 interface Body {
@@ -85,6 +92,8 @@ export const layout = (
   previous: Map<string, Point>,
   frame: Frame,
   centre: Box | null,
+  /** Picks the arrangement for nodes with no position yet. */
+  seed = 0,
 ): Map<string, Point> => {
   const neighbours = (id: string) =>
     graph.edges.flatMap((e) => (e.from === id ? [e.to] : e.to === id ? [e.from] : []))
@@ -99,7 +108,7 @@ export const layout = (
       ? angleAt(seen, frame)
       : anchor
         ? angleAt(anchor, frame) + (i % 2 ? 0.5 : -0.5)
-        : hashAngle(n.id)
+        : hashAngle(n.id, seed)
     return { id: n.id, ring: RING[n.layer], theta, w: box.w, h: box.h, x: 0, y: 0 }
   })
 

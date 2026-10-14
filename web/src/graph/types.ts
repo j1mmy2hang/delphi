@@ -12,6 +12,8 @@ export interface MapNode {
   id: string
   label: string
   layer: Layer
+  /** Whose thought: the user's own, or Delphi's reading of them. Older saved maps lack it. */
+  by?: 'user' | 'delphi'
 }
 
 export interface MapEdge {
@@ -37,8 +39,10 @@ export interface ThoughtMapState {
   origin: string
   /** Bumped on every change, so the header button can say "something new". */
   version: number
+  /** Which arrangement around the rings; reshuffling picks another. */
+  seed: number
 }
 
 export const EMPTY_GRAPH: ThoughtGraph = { title: '', frontier: '', nodes: [], edges: [] }
 
-export const EMPTY_STATE: ThoughtMapState = { graph: EMPTY_GRAPH, was: {}, origin: '', version: 0 }
+export const EMPTY_STATE: ThoughtMapState = { graph: EMPTY_GRAPH, was: {}, origin: '', version: 0, seed: 0 }

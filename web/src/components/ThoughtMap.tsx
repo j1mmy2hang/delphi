@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { frameFor, layout, RING, type Box, type Point } from '../graph/layout'
+import { frameFor, layout, RING, type Box, type Frame, type Point } from '../graph/layout'
 import type { Layer, MapNode, ThoughtGraph } from '../graph/types'
 
 /**
@@ -35,26 +35,45 @@ const textWidth = (text: string, size: number, weight: number, family: string, i
 /** The footprint the layout keeps clear for a node: dot, label, and the old label under it. */
 const boxOf = (node: MapNode, was: string | undefined, sans: string): Box => {
   const look = LOOK[node.layer]
-  const label = textWidth(node.label, look.size, look.weight, sans) + (look.dot ? look.dot * 2 + 6 : 0)
+  const label = textWidth(node.label, look.size, look.weight, sans, isReading(node)) + (look.dot ? look.dot * 2 + 6 : 0)
   const old = was ? textWidth(was, WAS_SIZE, 400, sans) : 0
   return { w: Math.max(label, old) + 6, h: look.size + 8 + (was ? WAS_SIZE + 4 : 0) }
 }
+
+/** Delphi's reading of the user, not yet theirs: drawn hollow and in italics. */
+const isReading = (node: MapNode) => node.by === 'delphi'
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
 
 /**
  * Glides every node from where it's drawn to where the layout puts it. New
  * nodes start at the node they grew from, so the map visibly grows outward
- * from what's already there.
+ * from what's already there. When the canvas itself changed size, what's
+ * shown is first carried into the new frame, so it glides only by what the
+ * new layout changed.
  */
-const useGlide = (target: Map<string, Point>, origins: Map<string, Point>, instant: boolean) => {
+const useGlide = (
+  target: Map<string, Point>,
+  origins: Map<string, Point>,
+  canvas: Frame,
+  instant: boolean,
+) => {
   const [shown, setShown] = useState(target)
   const shownRef = useRef(shown)
   shownRef.current = shown
+  const shownIn = useRef(canvas)
 
   useEffect(() => {
+    const scale = { x: canvas.rx / shownIn.current.rx, y: canvas.ry / shownIn.current.ry }
+    shownIn.current = canvas
     const from = new Map<string, Point>()
-    for (const [id, to] of target) from.set(id, shownRef.current.get(id) ?? origins.get(id) ?? to)
+    for (const [id, to] of target) {
+      const shown = shownRef.current.get(id)
+      from.set(id, shown ? { x: shown.x * scale.x, y: shown.y * scale.y } : (origins.get(id) ?? to))
+    }
+    // Kept at once, so an update that lands before the first frame starts
+    // from here too, not from positions in the old frame.
+    shownRef.current = from
     if (instant) {
       setShown(target)
       return
@@ -95,7 +114,7 @@ const arc = (a: Point, b: Point) => {
 const dotOffset = (node: MapNode, was: string | undefined, sans: string): Point => {
   const look = LOOK[node.layer]
   if (!look.dot) return { x: 0, y: 0 }
-  const row = textWidth(node.label, look.size, look.weight, sans) + look.dot * 2 + 6
+  const row = textWidth(node.label, look.size, look.weight, sans, isReading(node)) + look.dot * 2 + 6
   return { x: -row / 2 + look.dot, y: was ? -(WAS_SIZE + 4) / 2 : 0 }
 }
 
@@ -104,9 +123,16 @@ interface ThoughtMapProps {
   was: Record<string, string>
   width: number
   height: number
+  /** The arrangement around the rings. A new one lays the map out afresh. */
+  seed: number
 }
 
-export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
+export const ThoughtMap = ({ graph, was, width: outerWidth, height: outerHeight, seed }: ThoughtMapProps) => {
+  // A big panel (the map expanded) draws the same map larger rather than
+  // sparser: everything is laid out on a smaller canvas and scaled up.
+  const zoom = Math.min(1.4, Math.max(1, Math.min(outerWidth / 820, outerHeight / 520)))
+  const width = outerWidth / zoom
+  const height = outerHeight / zoom
   const reduceMotion = useReducedMotion() ?? false
   const [hovered, setHovered] = useState<string | null>(null)
   const sans = useMemo(() => getComputedStyle(document.body).fontFamily, [])
@@ -130,10 +156,15 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
 
   // Positions persist across updates, so the layout only nudges what's there.
   const placed = useRef(new Map<string, Point>())
+  const placedWith = useRef(seed)
   const { target, origins } = useMemo(() => {
     const boxes = new Map(graph.nodes.map((n) => [n.id, boxOf(n, was[n.id], sans)]))
-    const previous = placed.current
-    const target = layout(graph, boxes, previous, frame, frontierBox)
+    // Reshuffled: start over from the new arrangement, not from where things
+    // are. They still glide there from where they're drawn.
+    const reshuffled = placedWith.current !== seed
+    placedWith.current = seed
+    const previous = reshuffled ? new Map<string, Point>() : placed.current
+    const target = layout(graph, boxes, previous, frame, frontierBox, seed)
     // Where a new node grows from: the node it's linked to, if that was here.
     const origins = new Map<string, Point>()
     for (const n of graph.nodes) {
@@ -147,9 +178,9 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
     }
     placed.current = target
     return { target, origins }
-  }, [graph, was, frame, frontierBox, sans])
+  }, [graph, was, frame, frontierBox, sans, seed])
 
-  const pos = useGlide(target, origins, reduceMotion)
+  const pos = useGlide(target, origins, frame, reduceMotion)
 
   // Ripples mark what changed in this update: a new thought, or a revised one.
   const seenLabels = useRef(new Map<string, string>())
@@ -186,8 +217,8 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
 
   return (
     <svg
-      width={width}
-      height={height}
+      width={outerWidth}
+      height={outerHeight}
       viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
       className="block select-none"
       role="img"
@@ -358,7 +389,9 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
                   cx={dotOffset(n, old, sans).x}
                   cy={dotOffset(n, old, sans).y}
                   r={look.dot}
-                  fill={COLOR[n.layer]}
+                  fill={isReading(n) ? 'var(--background)' : COLOR[n.layer]}
+                  stroke={isReading(n) ? COLOR[n.layer] : 'none'}
+                  strokeWidth={1.25}
                 />
               )}
               <AnimatePresence mode="popLayout">
@@ -370,6 +403,7 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
                   textAnchor="middle"
                   fontSize={look.size}
                   fontWeight={look.weight}
+                  fontStyle={isReading(n) ? 'italic' : undefined}
                   fill={look.ink}
                   stroke="var(--background)"
                   strokeWidth={4}
@@ -410,7 +444,9 @@ export const ThoughtMap = ({ graph, was, width, height }: ThoughtMapProps) => {
                   />
                 </g>
               )}
-              <title>{old ? `${n.label} (was: ${old})` : n.label}</title>
+              <title>
+                {(old ? `${n.label} (was: ${old})` : n.label) + (isReading(n) ? ' — what Delphi saw' : '')}
+              </title>
             </motion.g>
           )
         })}

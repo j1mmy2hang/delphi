@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Message } from '../types'
 import { mockGraphFetch } from '../dev/mockGraph'
 import { EMPTY_STATE, type ThoughtGraph, type ThoughtMapState } from './types'
@@ -6,7 +6,17 @@ import { EMPTY_STATE, type ThoughtGraph, type ThoughtMapState } from './types'
 // Same switch as the chat: dev draws a fake map unless VITE_REAL_API=true.
 const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_REAL_API !== 'true'
 
-const STORAGE_PREFIX = 'delphi-map:'
+// Bump the version when what a map means changes (its prompt or its shape):
+// maps saved under an older one are dropped and drawn again.
+const STORAGE_PREFIX = 'delphi-map:v3:'
+
+try {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('delphi-map:') && !key.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key)
+  }
+} catch {
+  // Storage blocked: nothing saved to clear.
+}
 
 type Saved = ThoughtMapState & { drawnFor: string }
 
@@ -47,6 +57,7 @@ const advance = (prev: ThoughtMapState, graph: ThoughtGraph): ThoughtMapState =>
     was,
     origin: prev.origin || first?.label || '',
     version: prev.version + 1,
+    seed: prev.seed,
   }
 }
 
@@ -90,7 +101,9 @@ export const useThoughtMap = (messages: Message[], conversationId: string | null
   useEffect(() => {
     const saved = conversationId ? read(conversationId) : null
     drawnFor.current = saved?.drawnFor ?? ''
-    const next = saved ? { graph: saved.graph, was: saved.was, origin: saved.origin, version: 0 } : EMPTY_STATE
+    const next = saved
+      ? { graph: saved.graph, was: saved.was, origin: saved.origin, version: 0, seed: saved.seed ?? 0 }
+      : EMPTY_STATE
     // Set the ref now: the drawing effect below runs in this same commit, and
     // must start from this conversation's map, not the last one's.
     stateRef.current = next
@@ -133,5 +146,17 @@ export const useThoughtMap = (messages: Message[], conversationId: string | null
     return () => controller.abort()
   }, [conversationId, basisKey])
 
-  return { ...state, status }
+  /**
+   * Another arrangement of the same map: every thought keeps its ring, only
+   * where it sits around it changes. Kept with the map, and not news, so the
+   * header button doesn't light up for it.
+   */
+  const reshuffle = useCallback(() => {
+    const next = { ...stateRef.current, seed: Math.floor(Math.random() * 2 ** 31) }
+    stateRef.current = next
+    setState(next)
+    if (conversationId) write(conversationId, { ...next, drawnFor: drawnFor.current })
+  }, [conversationId])
+
+  return { ...state, status, reshuffle }
 }

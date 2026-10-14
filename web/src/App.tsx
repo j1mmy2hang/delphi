@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Hero } from './components/Hero'
+import { FirstOnScreen } from './components/FirstOnScreen'
 import { HomeNote } from './components/HomeNote'
 import { HistorySidebar } from './components/HistorySidebar'
 import { LoadingState } from './components/LoadingState'
@@ -107,18 +108,19 @@ function App() {
   // How many messages came from a saved file when it was opened (null for a
   // conversation started here). Those enter as a cascade, not as live turns.
   const [openedCount, setOpenedCount] = useState<number | null>(null)
+  // The first of those on screen once it has settled at its end (FirstOnScreen);
+  // null until measured, and the opened messages wait hidden till then.
+  const [cascadeFrom, setCascadeFrom] = useState<number | null>(null)
+  const opened = (i: number) => openedCount !== null && i < openedCount
 
   /**
    * When each message fades in. Live: the opening exchange waits for the hero
    * to clear, later turns appear at once, and a reply trails its question.
-   * Opened from history: strictly top to bottom. It opens scrolled to its end,
-   * so only the last few on screen cascade; the ones above appear at once.
+   * Opened from history: strictly top to bottom, starting from the first
+   * message on screen; the ones scrolled out of view above appear at once.
    */
   const entranceDelay = (i: number, role: ChatMessage['role']) => {
-    if (openedCount !== null && i < openedCount) {
-      const firstInCascade = Math.max(0, openedCount - 8)
-      return 0.08 + Math.max(0, i - firstInCascade) * 0.05
-    }
+    if (opened(i)) return 0.08 + Math.max(0, i - (cascadeFrom ?? 0)) * 0.05
     return (i < 2 ? 0.12 : 0) + (role === 'assistant' ? 0.12 : 0)
   }
 
@@ -145,6 +147,7 @@ function App() {
     savedRef.current = { messages: conversation.messages, generation }
     setMeta({ id: conversation.id, created: conversation.created, title: conversation.title })
     setOpenedCount(conversation.messages.length)
+    setCascadeFrom(null)
     load(conversation.messages)
     setInput('')
   }
@@ -174,6 +177,7 @@ function App() {
         onClose={() => setMapOpen(false)}
         map={map}
         status={map.status}
+        onReshuffle={map.reshuffle}
       />
       <div className="relative mx-auto flex h-(--app-height,100dvh) min-w-0 flex-1 flex-col overflow-hidden">
         {/* Safe-area insets keep the header clear of the notch (landscape, or
@@ -276,11 +280,13 @@ function App() {
                         ? stripAngleTags(message.content)
                         : message.content
                     const delay = entranceDelay(i, message.role)
+                    const waiting = opened(i) && cascadeFrom === null
                     return (
                       <motion.div
                         key={i}
+                        data-message={i}
                         initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        animate={waiting ? { opacity: 0, y: 8 } : { opacity: 1, y: 0 }}
                         transition={{ duration: 0.35, ease: EASE_OUT, delay }}
                       >
                         <Message from={message.role}>
@@ -313,6 +319,7 @@ function App() {
                     )
                   })}
                   <ScrollPastEnd />
+                  {openedCount !== null && <FirstOnScreen onMeasure={setCascadeFrom} />}
                   <ScrollEdge />
                 </ConversationContent>
                 <ConversationScrollButton />

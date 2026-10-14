@@ -23,10 +23,14 @@ const PAID_BUDGET_USD = Number(Netlify.env.get("PAID_BUDGET_USD") ?? "2")
 const DAILY_IP_BUDGET_USD = Number(Netlify.env.get("DAILY_IP_BUDGET_USD") ?? "0.5")
 const FALLBACK_PRICE_PER_MTOK = { input: 1, output: 4 }
 
-/** Same input guards as chat.mts. */
-const MAX_MESSAGES = 40
+/**
+ * Input guards. Unlike chat, a long conversation is never refused: the map so
+ * far already holds what came before, so the model reads the opening and the
+ * most recent stretch that fits, and the middle is left to the map.
+ */
+const MAX_MESSAGES = 1_000
 const MAX_CHARS_PER_MESSAGE = 8_000
-const MAX_TOTAL_CHARS = 24_000
+const MAX_TOTAL_CHARS = 48_000 // ~a long evening's talk; ~1¢ per draw at the cap
 
 /** Its own burst window, so drawing the graph never eats into the chat's. */
 const BURST_LIMIT = { windowSeconds: 60, max: 20 }
@@ -34,14 +38,16 @@ const BURST_LIMIT = { windowSeconds: 60, max: 20 }
 const ALLOWED_ORIGINS = ["https://delphi-web.netlify.app"]
 
 /** Hard limits on what reaches the client, whatever the model returns. */
-const MAX_NODES = 10
-const MAX_EDGES = 18
+const MAX_NODES = 18
+const MAX_EDGES = 32
 const MAX_LABEL_CHARS = 32
 const MAX_TITLE_CHARS = 48
 
 /** Outermost ring first; the core sits at the centre. */
 const LAYERS = ["surface", "reaction", "belief", "core"] as const
 const EDGE_KINDS = ["link", "tension"] as const
+/** Whose thought: the user's own, or Delphi's reading of them. */
+const AUTHORS = ["user", "delphi"] as const
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prompt: graph-prompt.md, bundled via netlify.toml `included_files`. Re-read
@@ -79,7 +85,8 @@ const prompt = () => (IS_LOCAL_DEV ? loadPrompt() : PROMPT)
 type ChatMessage = { role: "user" | "assistant"; content: string }
 type EdgeKind = (typeof EDGE_KINDS)[number]
 type Layer = (typeof LAYERS)[number]
-type GraphNode = { id: string; label: string; layer: Layer }
+type Author = (typeof AUTHORS)[number]
+type GraphNode = { id: string; label: string; layer: Layer; by: Author }
 type GraphEdge = { from: string; to: string; kind: EdgeKind }
 type Graph = { title: string; frontier: string; nodes: GraphNode[]; edges: GraphEdge[] }
 
@@ -95,11 +102,12 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "label", "layer"],
+        required: ["id", "label", "layer", "by"],
         properties: {
           id: { type: "string" },
           label: { type: "string" },
           layer: { type: "string", enum: LAYERS },
+          by: { type: "string", enum: AUTHORS },
         },
       },
     },
@@ -143,7 +151,7 @@ const sanitize = (input: unknown): Graph => {
     // The centre holds one thought; a second "core" stays one ring out.
     if (layer === "core" && hasCore) layer = "belief"
     if (layer === "core") hasCore = true
-    nodes.push({ id, label, layer })
+    nodes.push({ id, label, layer, by: n.by === "delphi" ? "delphi" : "user" })
   }
 
   const edges: GraphEdge[] = []
@@ -167,12 +175,18 @@ const sanitize = (input: unknown): Graph => {
 }
 
 /** The whole request as one message: the transcript, then the map so far. */
-const brief = (messages: ChatMessage[], previous: Graph): string => {
-  const transcript = messages
+const brief = (all: ChatMessage[], previous: Graph): string => {
+  const { messages, skipped } = windowOf(all)
+  const turns = messages
     // Delphi's replies can open with a <situation N> tag; it's for the chat
     // model, not part of what was said.
     .map((m) => `[${m.role === "user" ? "USER" : "DELPHI"}]\n${m.content.replace(/<situation[^>]*>/g, "").trim()}`)
-    .join("\n\n")
+  if (skipped) turns.splice(1, 0, `[… ${skipped} messages omitted here; the previous map holds them]`)
+  const transcript = turns.join("\n\n")
+  // Left to itself the model summarises a long conversation into a few
+  // nodes; a concrete size keeps the map as rich as the talk was.
+  const said = all.filter((m) => m.role === "user" && m.content.trim().length > 8).length
+  const target = Math.min(16, Math.max(1, said))
   return [
     "<conversation>",
     transcript,
@@ -181,6 +195,8 @@ const brief = (messages: ChatMessage[], previous: Graph): string => {
     "<previous_map>",
     JSON.stringify(previous),
     "</previous_map>",
+    "",
+    `The user has spoken ${said} times with substance; at its full size the map would hold about ${target} nodes (pace rules still apply to each turn).`,
     "",
     "Return the updated map.",
   ].join("\n")
@@ -262,16 +278,26 @@ const addSpend = async (key: string, usd: number): Promise<void> => {
 
 const validateMessages = (input: unknown): ChatMessage[] | null => {
   if (!Array.isArray(input) || input.length === 0 || input.length > MAX_MESSAGES) return null
-  let total = 0
   const clean: ChatMessage[] = []
   for (const m of input) {
     const { role, content } = (m ?? {}) as Record<string, unknown>
     if (role !== "user" && role !== "assistant") return null
-    if (typeof content !== "string" || content.length > MAX_CHARS_PER_MESSAGE) return null
-    total += content.length
-    clean.push({ role, content })
+    if (typeof content !== "string") return null
+    clean.push({ role, content: content.slice(0, MAX_CHARS_PER_MESSAGE) })
   }
-  return total > MAX_TOTAL_CHARS ? null : clean
+  return clean
+}
+
+/**
+ * What the model reads: the opening message, then as many of the latest as
+ * fit. `skipped` is how many in between were left out.
+ */
+const windowOf = (messages: ChatMessage[]): { messages: ChatMessage[]; skipped: number } => {
+  const [first, ...rest] = messages
+  let budget = MAX_TOTAL_CHARS - first.content.length
+  let start = rest.length
+  while (start > 0 && rest[start - 1].content.length <= budget) budget -= rest[--start].content.length
+  return { messages: [first, ...rest.slice(start)], skipped: start }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,9 +366,16 @@ export default async (req: Request, _context: Context) => {
     return json({ code: "upstream_error" }, 502)
   }
 
-  const result = (await upstream.json()) as {
+  let result: {
     choices?: { message?: { content?: string } }[]
     usage?: { cost?: number; prompt_tokens?: number; completion_tokens?: number }
+  }
+  try {
+    result = await upstream.json()
+  } catch (err) {
+    // OpenRouter can send a 200 whose body breaks off or isn't JSON.
+    console.error("graph: unreadable upstream response:", err)
+    return json({ graph: previous, kept: true }, 200)
   }
 
   if (!IS_LOCAL_DEV) {
