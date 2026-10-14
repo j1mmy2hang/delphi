@@ -288,31 +288,22 @@
   [data-sd-animate-marker]::marker { animation: none !important; }
 }
 
-/* ---------- Thought map ----------
-   One hue, deepening toward the centre: the surface is ink-grey, each ring in
-   warms, and the core is gold. Depth is the only thing colour says. Tension
-   is the one exception, in red. */
-@property --map-surface { syntax: '<color>'; inherits: true; initial-value: transparent; }
-@property --map-reaction { syntax: '<color>'; inherits: true; initial-value: transparent; }
-@property --map-belief { syntax: '<color>'; inherits: true; initial-value: transparent; }
-@property --map-core { syntax: '<color>'; inherits: true; initial-value: transparent; }
-@property --map-tension { syntax: '<color>'; inherits: true; initial-value: transparent; }
-@property --map-ring { syntax: '<color>'; inherits: true; initial-value: transparent; }
+/* ---------- Thought river ----------
+   Ink and one accent. Moves and their links are greys; gold is kept for the
+   realizations, where threads come together, and for tracing what a move
+   rests on. */
+@property --river-line { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --river-lane { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --river-gold { syntax: '<color>'; inherits: true; initial-value: transparent; }
 
 :root {
-  --map-surface: var(--base-300);
-  --map-reaction: #da702c;
-  --map-belief: #bc5215;
-  --map-core: #ad8301;
-  --map-tension: #af3029;
-  --map-ring: var(--base-150);
+  --river-line: var(--base-300);
+  --river-lane: var(--base-150);
+  --river-gold: #ad8301;
 }
 
 :root[data-theme='dark'] {
-  --map-surface: var(--base-700);
-  --map-reaction: #9d4310;
-  --map-belief: #da702c;
-  --map-core: #d0a215;
-  --map-tension: #d14d41;
-  --map-ring: var(--base-850);
+  --river-line: var(--base-700);
+  --river-lane: var(--base-850);
+  --river-gold: #d0a215;
 }

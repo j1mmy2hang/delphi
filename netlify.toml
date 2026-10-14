@@ -7,7 +7,7 @@
   functions = "netlify/functions"
 
 [functions]
-  included_files = ["system-prompt.md", "graph-prompt.md"]
+  included_files = ["system-prompt.md", "river-prompt.md"]
 
 # `netlify dev` runs this command from the repo root, so point it at web/ explicitly.
 [dev]

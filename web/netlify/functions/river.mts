@@ -5,17 +5,22 @@ import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The thought graph: a second, cheap model reads the conversation and returns
-// a map of the user's thinking as JSON. It runs beside the chat and never
-// touches it — chat.mts is unchanged. Spend is billed to the same allowance
-// as the chat, so a graph can't be used to get around the budget.
+// The thought river: a second, cheap model reads the conversation and returns
+// the moves that carried its thinking — questions, claims, examples,
+// realizations — each linked back to what it rests on. It runs beside the
+// chat and never touches it; chat.mts is unchanged. Spend is billed to the
+// same allowance as the chat, so the river can't be used to get around it.
+//
+// The river only ever grows. Each call reads the messages since the last one
+// and returns moves for those alone; the server appends them, so what's
+// already drawn never shifts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** OpenRouter's moving alias for the newest Gemini Flash. */
 const MODEL = "~google/gemini-flash-latest"
 
-/** The graph is small JSON; this is a generous ceiling. */
-const MAX_OUTPUT_TOKENS = 2000
+/** A first drawing of a long conversation can run to a few dozen moves. */
+const MAX_OUTPUT_TOKENS = 6000
 
 /** Same allowances as chat.mts — keep in sync. */
 const FREE_BUDGET_USD = Number(Netlify.env.get("FREE_BUDGET_USD") ?? "0.5")
@@ -24,33 +29,31 @@ const DAILY_IP_BUDGET_USD = Number(Netlify.env.get("DAILY_IP_BUDGET_USD") ?? "0.
 const FALLBACK_PRICE_PER_MTOK = { input: 1, output: 4 }
 
 /**
- * Input guards. Unlike chat, a long conversation is never refused: the map so
- * far already holds what came before, so the model reads the opening and the
- * most recent stretch that fits, and the middle is left to the map.
+ * Input guards. Unlike chat, a long conversation is never refused: the model
+ * reads the opening and the most recent stretch that fits, and the river
+ * already holds the moves from the middle.
  */
 const MAX_MESSAGES = 1_000
 const MAX_CHARS_PER_MESSAGE = 8_000
 const MAX_TOTAL_CHARS = 48_000 // ~a long evening's talk; ~1¢ per draw at the cap
 
-/** Its own burst window, so drawing the graph never eats into the chat's. */
+/** Its own burst window, so drawing the river never eats into the chat's. */
 const BURST_LIMIT = { windowSeconds: 60, max: 20 }
 
 const ALLOWED_ORIGINS = ["https://delphi-web.netlify.app"]
 
 /** Hard limits on what reaches the client, whatever the model returns. */
-const MAX_NODES = 18
-const MAX_EDGES = 32
-const MAX_LABEL_CHARS = 32
+const MAX_MOVES = 80
+const MAX_RESTS = 3
+const MAX_LABEL_CHARS = 28
 const MAX_TITLE_CHARS = 48
 
-/** Outermost ring first; the core sits at the centre. */
-const LAYERS = ["surface", "reaction", "belief", "core"] as const
-const EDGE_KINDS = ["link", "tension"] as const
-/** Whose thought: the user's own, or Delphi's reading of them. */
-const AUTHORS = ["user", "delphi"] as const
+const SPEAKERS = ["user", "delphi"] as const
+const KINDS = ["question", "claim", "evidence", "realization"] as const
+const HOWS = ["builds", "answers", "challenges"] as const
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Prompt: graph-prompt.md, bundled via netlify.toml `included_files`. Re-read
+// Prompt: river-prompt.md, bundled via netlify.toml `included_files`. Re-read
 // on every request under `netlify dev`, so an edit applies to the next turn.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -59,11 +62,11 @@ const IS_LOCAL_DEV = Netlify.env.get("NETLIFY_DEV") === "true"
 
 const loadPrompt = (): string => {
   const candidates = [
-    ...["", "..", "../..", "../../.."].map((up) => resolve(here, up, "graph-prompt.md")),
-    // `netlify dev` started before graph-prompt.md was added to included_files
+    ...["", "..", "../..", "../../.."].map((up) => resolve(here, up, "river-prompt.md")),
+    // `netlify dev` started before river-prompt.md was added to included_files
     // doesn't bundle it; read the source instead.
-    resolve(process.cwd(), "web/graph-prompt.md"),
-    resolve(process.cwd(), "graph-prompt.md"),
+    resolve(process.cwd(), "web/river-prompt.md"),
+    resolve(process.cwd(), "river-prompt.md"),
   ]
   for (const path of candidates) {
     try {
@@ -72,7 +75,7 @@ const loadPrompt = (): string => {
       // try next
     }
   }
-  throw new Error("graph-prompt.md not found")
+  throw new Error("river-prompt.md not found")
 }
 
 const PROMPT = loadPrompt()
@@ -83,122 +86,152 @@ const prompt = () => (IS_LOCAL_DEV ? loadPrompt() : PROMPT)
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
-type EdgeKind = (typeof EDGE_KINDS)[number]
-type Layer = (typeof LAYERS)[number]
-type Author = (typeof AUTHORS)[number]
-type GraphNode = { id: string; label: string; layer: Layer; by: Author }
-type GraphEdge = { from: string; to: string; kind: EdgeKind }
-type Graph = { title: string; frontier: string; nodes: GraphNode[]; edges: GraphEdge[] }
+type Rest = { on: string; how: (typeof HOWS)[number] }
+type Move = {
+  id: string
+  /** Which message it came from, counting from 1. */
+  at: number
+  by: (typeof SPEAKERS)[number]
+  kind: (typeof KINDS)[number]
+  label: string
+  rests: Rest[]
+}
+/** `upTo`: how many messages the river has read so far. */
+type River = { title: string; upTo: number; moves: Move[] }
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "frontier", "nodes", "edges"],
+  required: ["title", "moves"],
   properties: {
     title: { type: "string" },
-    frontier: { type: "string" },
-    nodes: {
+    moves: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "label", "layer", "by"],
+        required: ["id", "at", "by", "kind", "label", "rests"],
         properties: {
           id: { type: "string" },
+          at: { type: "integer" },
+          by: { type: "string", enum: SPEAKERS },
+          kind: { type: "string", enum: KINDS },
           label: { type: "string" },
-          layer: { type: "string", enum: LAYERS },
-          by: { type: "string", enum: AUTHORS },
-        },
-      },
-    },
-    edges: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["from", "to", "kind"],
-        properties: {
-          from: { type: "string" },
-          to: { type: "string" },
-          kind: { type: "string", enum: EDGE_KINDS },
+          rests: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["on", "how"],
+              properties: {
+                on: { type: "string" },
+                how: { type: "string", enum: HOWS },
+              },
+            },
+          },
         },
       },
     },
   },
 }
 
+const clip = (s: unknown, n: number) =>
+  typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, n) : ""
+
 /**
- * Whatever came back — from the model, or from the client as the previous
- * graph — leaves here well-formed: known layers and kinds, unique ids, clamped
- * text, at most one core, no self-loops, no duplicate or dangling edges, and
- * within the size limits.
+ * Appends moves to a river, keeping only what's well-formed: known kinds and
+ * speakers, unique ids, a message number within `from..to`, never earlier
+ * than the move before it, and links only to moves already in the river and
+ * no later than itself. Used both on the client's previous river (from 1)
+ * and on the model's new moves (after what the river has read).
  */
-const sanitize = (input: unknown): Graph => {
+const appendMoves = (river: Move[], input: unknown, from: number, to: number): Move[] => {
+  const out = [...river]
+  const byId = new Map(out.map((m) => [m.id, m]))
+  for (const raw of (Array.isArray(input) ? input : []) as Record<string, any>[]) {
+    if (out.length >= MAX_MOVES) break
+    const id = clip(raw?.id, 24)
+    const label = clip(raw?.label, MAX_LABEL_CHARS)
+    const at = Number(raw?.at)
+    if (!id || !label || byId.has(id) || !Number.isInteger(at) || at < from || at > to) continue
+    if (out.length && at < out[out.length - 1].at) continue
+    const rests: Rest[] = []
+    for (const r of (Array.isArray(raw.rests) ? raw.rests : []) as Record<string, any>[]) {
+      const on = byId.get(clip(r?.on, 24))
+      if (!on || on.at > at || rests.some((x) => x.on === on.id) || rests.length >= MAX_RESTS) continue
+      rests.push({ on: on.id, how: HOWS.includes(r.how) ? r.how : "builds" })
+    }
+    const move: Move = {
+      id,
+      at,
+      by: raw.by === "delphi" ? "delphi" : "user",
+      kind: KINDS.includes(raw.kind) ? raw.kind : "claim",
+      label,
+      rests,
+    }
+    out.push(move)
+    byId.set(id, move)
+  }
+  return out
+}
+
+const sanitizeRiver = (input: unknown, messageCount: number): River => {
   const raw = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>
-  const clip = (s: unknown, n: number) =>
-    typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, n) : ""
-
-  const nodes: GraphNode[] = []
-  const ids = new Set<string>()
-  let hasCore = false
-  for (const n of (Array.isArray(raw.nodes) ? raw.nodes : []) as Record<string, any>[]) {
-    if (nodes.length >= MAX_NODES) break
-    const id = clip(n?.id, 24)
-    const label = clip(n?.label, MAX_LABEL_CHARS)
-    if (!id || !label || ids.has(id)) continue
-    ids.add(id)
-    let layer: Layer = LAYERS.includes(n.layer) ? n.layer : "surface"
-    // The centre holds one thought; a second "core" stays one ring out.
-    if (layer === "core" && hasCore) layer = "belief"
-    if (layer === "core") hasCore = true
-    nodes.push({ id, label, layer, by: n.by === "delphi" ? "delphi" : "user" })
-  }
-
-  const edges: GraphEdge[] = []
-  const pairs = new Set<string>()
-  for (const e of (Array.isArray(raw.edges) ? raw.edges : []) as Record<string, any>[]) {
-    if (edges.length >= MAX_EDGES) break
-    const from = clip(e?.from, 24)
-    const to = clip(e?.to, 24)
-    const pair = [from, to].sort().join("|")
-    if (!ids.has(from) || !ids.has(to) || from === to || pairs.has(pair)) continue
-    pairs.add(pair)
-    edges.push({ from, to, kind: e.kind === "tension" ? "tension" : "link" })
-  }
-
+  const upTo = Math.min(messageCount, Math.max(0, Math.floor(Number(raw.upTo) || 0)))
   return {
     title: clip(raw.title, MAX_TITLE_CHARS),
-    frontier: clip(raw.frontier, MAX_LABEL_CHARS),
-    nodes,
-    edges,
+    upTo,
+    moves: appendMoves([], raw.moves, 1, upTo),
   }
 }
 
-/** The whole request as one message: the transcript, then the map so far. */
-const brief = (all: ChatMessage[], previous: Graph): string => {
-  const { messages, skipped } = windowOf(all)
-  const turns = messages
-    // Delphi's replies can open with a <situation N> tag; it's for the chat
-    // model, not part of what was said.
-    .map((m) => `[${m.role === "user" ? "USER" : "DELPHI"}]\n${m.content.replace(/<situation[^>]*>/g, "").trim()}`)
-  if (skipped) turns.splice(1, 0, `[… ${skipped} messages omitted here; the previous map holds them]`)
-  const transcript = turns.join("\n\n")
-  // Left to itself the model summarises a long conversation into a few
-  // nodes; a concrete size keeps the map as rich as the talk was.
-  const said = all.filter((m) => m.role === "user" && m.content.trim().length > 8).length
-  const target = Math.min(16, Math.max(1, said))
+/** Delphi's replies can open with a <situation N> tag; it's for the chat model, not part of what was said. */
+const said = (m: ChatMessage) => m.content.replace(/<situation[^>]*>/g, "").trim()
+
+/**
+ * What the model reads: the opening message, then as many of the latest as
+ * fit — always including every message it's to draw. Messages keep their
+ * numbers, so moves can say where they came from.
+ */
+const transcriptOf = (all: ChatMessage[], from: number): string => {
+  const line = (m: ChatMessage, i: number) => `[#${i + 1} ${m.role === "user" ? "USER" : "DELPHI"}]\n${said(m)}`
+  let budget = MAX_TOTAL_CHARS - all[0].content.length
+  // The messages to draw are always read, unless they alone overflow the
+  // budget (a first drawing of a very long conversation); then the latest
+  // that fit.
+  const fresh = all.slice(from - 1).reduce((n, m) => n + m.content.length, 0)
+  const forced = fresh <= budget ? from - 1 : all.length
+  let start = all.length
+  while (start > 1 && (start - 1 >= forced || all[start - 1].content.length <= budget)) {
+    budget -= all[--start].content.length
+  }
+  const kept = [line(all[0], 0)]
+  if (start > 1) kept.push(`[… messages #2–#${start} omitted; the river already holds their moves]`)
+  for (let i = start; i < all.length; i++) kept.push(line(all[i], i))
+  return kept.join("\n\n")
+}
+
+/** The request as one message: the conversation, the river so far, and what to draw. */
+const brief = (all: ChatMessage[], river: River): string => {
+  const from = river.upTo + 1
+  const count = all.length - river.upTo
+  const nextId = river.moves.reduce((n, m) => Math.max(n, Number(m.id.replace(/\D/g, "")) || 0), 0) + 1
+  const sofar = river.moves.map((m) => ({ id: m.id, at: m.at, by: m.by, kind: m.kind, label: m.label }))
   return [
     "<conversation>",
-    transcript,
+    transcriptOf(all, from),
     "</conversation>",
     "",
-    "<previous_map>",
-    JSON.stringify(previous),
-    "</previous_map>",
+    "<river_so_far>",
+    JSON.stringify({ title: river.title, moves: sofar }),
+    "</river_so_far>",
     "",
-    `The user has spoken ${said} times with substance; at its full size the map would hold about ${target} nodes (pace rules still apply to each turn).`,
-    "",
-    "Return the updated map.",
+    river.moves.length
+      ? `Draw the moves in messages #${from}–#${all.length} only. New ids start at m${nextId}.`
+      : `Draw the whole conversation, messages #1–#${all.length}. Ids start at m1.`,
+    // Left to itself the model boils a conversation down to a few moves; a
+    // concrete number keeps the river as full as the talk was.
+    `That's ${count} messages: expect about ${Math.max(1, Math.round(count * 0.7))} moves, fewer if they're thin.`,
   ].join("\n")
 }
 
@@ -245,7 +278,7 @@ const overBurst = async (ip: string): Promise<boolean> => {
   try {
     const store = getStore("ratelimit")
     const bucket = Math.floor(Date.now() / 1000 / BURST_LIMIT.windowSeconds)
-    const key = `graph:${ip}:${bucket}`
+    const key = `river:${ip}:${bucket}`
     const current = (await store.get(key, { type: "json" })) as { count: number } | null
     const count = (current?.count ?? 0) + 1
     if (count > BURST_LIMIT.max) return true
@@ -276,6 +309,7 @@ const addSpend = async (key: string, usd: number): Promise<void> => {
   }
 }
 
+
 const validateMessages = (input: unknown): ChatMessage[] | null => {
   if (!Array.isArray(input) || input.length === 0 || input.length > MAX_MESSAGES) return null
   const clean: ChatMessage[] = []
@@ -286,18 +320,6 @@ const validateMessages = (input: unknown): ChatMessage[] | null => {
     clean.push({ role, content: content.slice(0, MAX_CHARS_PER_MESSAGE) })
   }
   return clean
-}
-
-/**
- * What the model reads: the opening message, then as many of the latest as
- * fit. `skipped` is how many in between were left out.
- */
-const windowOf = (messages: ChatMessage[]): { messages: ChatMessage[]; skipped: number } => {
-  const [first, ...rest] = messages
-  let budget = MAX_TOTAL_CHARS - first.content.length
-  let start = rest.length
-  while (start > 0 && rest[start - 1].content.length <= budget) budget -= rest[--start].content.length
-  return { messages: [first, ...rest.slice(start)], skipped: start }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +340,7 @@ export default async (req: Request, _context: Context) => {
   const apiKey = Netlify.env.get("OPENROUTER_API_KEY")
   if (!apiKey) return json({ code: "unavailable" }, 503)
 
-  let body: { messages?: unknown; graph?: unknown }
+  let body: { messages?: unknown; river?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -326,7 +348,9 @@ export default async (req: Request, _context: Context) => {
   }
   const messages = validateMessages(body.messages)
   if (!messages) return json({ code: "invalid_request" }, 400)
-  const previous = sanitize(body.graph)
+  const previous = sanitizeRiver(body.river, messages.length)
+  // Nothing new to read (a reply that failed, say): the river stands.
+  if (previous.upTo >= messages.length) return json({ river: previous }, 200)
 
   let upstream: Response
   try {
@@ -341,13 +365,13 @@ export default async (req: Request, _context: Context) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
-        // Speed matters more than depth: the graph should land while Delphi
-        // is still replying.
+        // Speed matters more than depth: the river should land soon after
+        // Delphi's reply does.
         reasoning: { effort: "minimal" },
         usage: { include: true },
         response_format: {
           type: "json_schema",
-          json_schema: { name: "thought_graph", strict: true, schema: SCHEMA },
+          json_schema: { name: "thought_river", strict: true, schema: SCHEMA },
         },
         messages: [
           { role: "system", content: prompt() },
@@ -357,12 +381,12 @@ export default async (req: Request, _context: Context) => {
       signal: req.signal,
     })
   } catch (err) {
-    console.error("graph upstream fetch failed:", err)
+    console.error("river upstream fetch failed:", err)
     return json({ code: "upstream_error" }, 502)
   }
 
   if (!upstream.ok) {
-    console.error("graph openrouter error:", upstream.status, await upstream.text().catch(() => ""))
+    console.error("river openrouter error:", upstream.status, await upstream.text().catch(() => ""))
     return json({ code: "upstream_error" }, 502)
   }
 
@@ -374,8 +398,8 @@ export default async (req: Request, _context: Context) => {
     result = await upstream.json()
   } catch (err) {
     // OpenRouter can send a 200 whose body breaks off or isn't JSON.
-    console.error("graph: unreadable upstream response:", err)
-    return json({ graph: previous, kept: true }, 200)
+    console.error("river: unreadable upstream response:", err)
+    return json({ river: previous, kept: true }, 200)
   }
 
   if (!IS_LOCAL_DEV) {
@@ -389,13 +413,18 @@ export default async (req: Request, _context: Context) => {
     await addSpend(allowance.key, cost)
   }
 
-  // A malformed answer keeps the previous graph rather than breaking it.
-  let graph: Graph
+  // A malformed answer keeps the river as it was rather than breaking it.
+  let answer: Record<string, unknown>
   try {
-    graph = sanitize(JSON.parse(result.choices?.[0]?.message?.content ?? ""))
+    answer = JSON.parse(result.choices?.[0]?.message?.content ?? "")
   } catch {
-    console.error("graph: unparseable model output")
-    return json({ graph: previous, kept: true }, 200)
+    console.error("river: unparseable model output")
+    return json({ river: previous, kept: true }, 200)
   }
-  return json({ graph }, 200)
+  const river: River = {
+    title: clip(answer.title, MAX_TITLE_CHARS) || previous.title,
+    upTo: messages.length,
+    moves: appendMoves(previous.moves, answer.moves, previous.upTo + 1, messages.length),
+  }
+  return json({ river }, 200)
 }

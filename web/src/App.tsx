@@ -25,13 +25,13 @@ import { ScrollEdge } from './components/ScrollEdge'
 import { ScrollPastEnd } from './components/ScrollPastEnd'
 import { StreamingReply } from './components/StreamingReply'
 import { ThemeToggle } from './components/ThemeToggle'
-import { ThoughtMapButton } from './components/ThoughtMapButton'
-import { ThoughtMapPanel } from './components/ThoughtMapPanel'
+import { ThoughtRiverButton } from './components/ThoughtRiverButton'
+import { ThoughtRiverPanel } from './components/ThoughtRiverPanel'
 import { EASE_IN, EASE_OUT, FLOATING_BUTTON, SPRING_GLIDE } from './constants'
 import { useChatStream } from './hooks/useChatStream'
 import { useConversationLibrary, type LibraryEntry } from './hooks/useConversationLibrary'
 import { useMobileViewport } from './hooks/useMobileViewport'
-import { useThoughtMap } from './graph/useThoughtMap'
+import { useThoughtRiver } from './river/useThoughtRiver'
 import { localISO, titleFrom } from './storage/conversationFile'
 import type { Message as ChatMessage } from './types'
 import { newId } from './utils/id'
@@ -59,15 +59,15 @@ function App() {
 
   const toggleHistory = (open = !historyOpen) => setHistoryOpen(open)
 
-  // The thought map: drawn beside the chat by a second model, from the user's
-  // side of the conversation. The button lights up when it changes unseen.
-  const map = useThoughtMap(messages, meta?.id ?? null)
-  const [mapOpen, setMapOpen] = useState(false)
-  const [mapSeen, setMapSeen] = useState(0)
+  // The thought river: drawn beside the chat by a second model, once each
+  // reply is complete. The button lights up when it grows unseen.
+  const river = useThoughtRiver(messages, meta?.id ?? null, isStreaming)
+  const [riverOpen, setRiverOpen] = useState(false)
+  const [riverSeen, setRiverSeen] = useState(0)
   useEffect(() => {
-    if (mapOpen) setMapSeen(map.version)
-  }, [mapOpen, map.version])
-  const mapFresh = !mapOpen && map.version > mapSeen && map.graph.nodes.length > 0
+    if (riverOpen) setRiverSeen(river.version)
+  }, [riverOpen, river.version])
+  const riverFresh = !riverOpen && river.version > riverSeen && river.river.moves.length > 0
 
   // Write the question as soon as it's sent, and the reply once it's complete
   // (or stopped) — not on every streamed token. Choosing a folder mid-chat
@@ -129,8 +129,8 @@ function App() {
     reset()
     setInput('')
     setMeta(null)
-    setMapOpen(false)
-    setMapSeen(0)
+    setRiverOpen(false)
+    setRiverSeen(0)
     savedRef.current = null
   }
 
@@ -172,12 +172,12 @@ function App() {
           onUnlink={library.unlink}
         />
       )}
-      <ThoughtMapPanel
-        open={mapOpen && chatStarted}
-        onClose={() => setMapOpen(false)}
-        map={map}
-        status={map.status}
-        onReshuffle={map.reshuffle}
+      <ThoughtRiverPanel
+        open={riverOpen && chatStarted}
+        onClose={() => setRiverOpen(false)}
+        state={river}
+        status={river.status}
+        messages={messages}
       />
       <div className="relative mx-auto flex h-(--app-height,100dvh) min-w-0 flex-1 flex-col overflow-hidden">
         {/* Safe-area insets keep the header clear of the notch (landscape, or
@@ -227,11 +227,11 @@ function App() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
-                  <ThoughtMapButton
-                    open={mapOpen}
-                    fresh={mapFresh}
-                    drawing={map.status === 'drawing'}
-                    onClick={() => setMapOpen((o) => !o)}
+                  <ThoughtRiverButton
+                    open={riverOpen}
+                    fresh={riverFresh}
+                    drawing={river.status === 'drawing'}
+                    onClick={() => setRiverOpen((o) => !o)}
                   />
                 </motion.div>
               )}

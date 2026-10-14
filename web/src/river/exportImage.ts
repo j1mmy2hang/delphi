@@ -1,6 +1,6 @@
 /**
- * The map as a card to keep: its title, the rings, and the line from where the
- * conversation began to where it arrived. Drawn from the live SVG, with every
+ * The river as a card to keep: its title, the river, and the line from where
+ * the conversation began to the last thing it realized. Drawn from the live SVG, with every
  * themed colour resolved, so the card matches what's on screen.
  */
 
@@ -46,13 +46,14 @@ const token = (name: string) =>
 
 export interface CardText {
   title: string
-  /** e.g. ["晚上一直刷视频", "省下重新启动的力气"]; or a question still open. */
+  /** The user's first move, and the latest realization; either can be ''. */
   from: string
   to: string
-  open: string
+  /** The lanes' names and heights in the SVG; on screen they're drawn over it. */
+  lanes: { name: string; y: number }[]
 }
 
-export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
+export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
   const { width, height } = svg.getBoundingClientRect()
   const clone = svg.cloneNode(true) as SVGSVGElement
   resolveStyles(svg, clone)
@@ -61,12 +62,13 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
   clone.setAttribute('width', String(width))
   clone.setAttribute('height', String(height))
   const markup = new XMLSerializer().serializeToString(clone)
-  const map = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`)
+  const river = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`)
 
   const pad = 44
   const head = 96
   const foot = 92
-  const scale = 2
+  // Sharp on a retina screen, but a long river stays a sensible file.
+  const scale = Math.min(2, 8000 / (width + pad * 2))
   const canvas = document.createElement('canvas')
   canvas.width = (width + pad * 2) * scale
   canvas.height = (height + head + foot) * scale
@@ -76,7 +78,7 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
   const bg = token('--background')
   const ink = token('--foreground')
   const muted = token('--muted-foreground')
-  const gold = token('--map-core')
+  const gold = token('--river-gold')
   const serif = token('--font-serif') || 'Georgia, serif'
   const sans = getComputedStyle(document.body).fontFamily
   const cardWidth = width + pad * 2
@@ -87,7 +89,7 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = ink
   ctx.font = `26px ${serif}`
-  ctx.fillText(text.title || 'Thought map', pad, 56, cardWidth - pad * 2)
+  ctx.fillText(text.title || 'Thought river', pad, 56, Math.min(cardWidth - pad * 2, 1200))
   ctx.fillStyle = muted
   ctx.font = `12px ${sans}`
   ctx.fillText(
@@ -96,12 +98,17 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
     78,
   )
 
-  ctx.drawImage(map, pad, head, width, height)
+  ctx.drawImage(river, pad, head, width, height)
+  ctx.fillStyle = ink
+  ctx.font = `14px ${serif}`
+  ctx.textBaseline = 'middle'
+  for (const lane of text.lanes) ctx.fillText(lane.name, pad + 4, head + lane.y)
+  ctx.textBaseline = 'alphabetic'
 
   const y = head + height + 46
   ctx.font = `15px ${sans}`
   if (text.from && text.to) {
-    // From the surface to the centre: the shape of the conversation in a line.
+    // From where it began to what it realized: the conversation in a line.
     ctx.fillStyle = muted
     ctx.fillText(text.from, pad, y)
     let x = pad + ctx.measureText(text.from).width
@@ -110,10 +117,6 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
     ctx.fillStyle = gold
     ctx.font = `600 15px ${sans}`
     ctx.fillText(text.to, x, y)
-  } else if (text.open) {
-    ctx.fillStyle = muted
-    ctx.font = `italic 15px ${serif}`
-    ctx.fillText(text.open, pad, y)
   }
   ctx.fillStyle = muted
   ctx.font = `12px ${sans}`
@@ -125,7 +128,7 @@ export const saveMapCard = async (svg: SVGSVGElement, text: CardText) => {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${(text.title || 'thought-map').replace(/[\\/:*?"<>|]/g, '')}.png`
+  a.download = `${(text.title || 'thought-river').replace(/[\\/:*?"<>|]/g, '')}.png`
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
