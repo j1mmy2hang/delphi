@@ -11,9 +11,13 @@ import { dirname, resolve } from "node:path"
 // chat and never touches it; chat.mts is unchanged. Spend is billed to the
 // same allowance as the chat, so the river can't be used to get around it.
 //
-// The river only ever grows. Each call reads the messages since the last one
-// and returns moves for those alone; the server appends them, so what's
-// already drawn never shifts.
+// Two speeds. Each exchange, a cheap draw reads the messages since the last
+// one and returns moves for those alone; the server appends them, so what's
+// already drawn never shifts. Every few exchanges — and whenever Delphi steps
+// back to sum up — a reflection reads the whole conversation with the whole
+// river and returns edits: links back to early moves, realizations,
+// merges, positions let go, and one line on what the river shows. The server
+// checks every edit; the river never loses its order or its record of turns.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** OpenRouter's moving alias for the newest Gemini Flash. */
@@ -21,6 +25,8 @@ const MODEL = "~google/gemini-flash-latest"
 
 /** A first drawing of a long conversation can run to a few dozen moves. */
 const MAX_OUTPUT_TOKENS = 6000
+/** A reflection returns edits, not the whole river. */
+const REFLECT_OUTPUT_TOKENS = 6000
 
 /** Same allowances as chat.mts — keep in sync. */
 const FREE_BUDGET_USD = Number(Netlify.env.get("FREE_BUDGET_USD") ?? "0.5")
@@ -45,8 +51,20 @@ const ALLOWED_ORIGINS = ["https://delphi-web.netlify.app"]
 /** Hard limits on what reaches the client, whatever the model returns. */
 const MAX_MOVES = 80
 const MAX_RESTS = 3
-const MAX_LABEL_CHARS = 28
+const MAX_LABEL_CHARS = 48
 const MAX_TITLE_CHARS = 48
+
+/**
+ * How many realizations a river may hold: a few, so each one means something.
+ * Three for a short talk, up to five for a long one.
+ */
+const realizationBudget = (messages: number) => (messages <= 20 ? 3 : messages <= 40 ? 4 : 5)
+const realizationsIn = (moves: Move[]) => moves.filter((m) => m.kind === "realization").length
+const MAX_INSIGHT_CHARS = 160
+/** A move can gain links in reflection beyond what a draw gives it. */
+const MAX_RESTS_REFLECTED = 5
+/** How much one reflection may change, so the river stays recognisable. */
+const MAX_EDITS = { adds: 4, links: 12, kinds: 6, merges: 6, drops: 10, relabels: 10, revisions: 4 }
 
 const SPEAKERS = ["user", "delphi"] as const
 const KINDS = ["question", "claim", "evidence", "realization"] as const
@@ -60,13 +78,13 @@ const HOWS = ["builds", "answers", "challenges"] as const
 const here = dirname(fileURLToPath(import.meta.url))
 const IS_LOCAL_DEV = Netlify.env.get("NETLIFY_DEV") === "true"
 
-const loadPrompt = (): string => {
+const loadPrompt = (name: string): string => {
   const candidates = [
-    ...["", "..", "../..", "../../.."].map((up) => resolve(here, up, "river-prompt.md")),
-    // `netlify dev` started before river-prompt.md was added to included_files
+    ...["", "..", "../..", "../../.."].map((up) => resolve(here, up, name)),
+    // `netlify dev` started before a prompt was added to included_files
     // doesn't bundle it; read the source instead.
-    resolve(process.cwd(), "web/river-prompt.md"),
-    resolve(process.cwd(), "river-prompt.md"),
+    resolve(process.cwd(), "web", name),
+    resolve(process.cwd(), name),
   ]
   for (const path of candidates) {
     try {
@@ -75,16 +93,18 @@ const loadPrompt = (): string => {
       // try next
     }
   }
-  throw new Error("river-prompt.md not found")
+  throw new Error(`${name} not found`)
 }
 
-const PROMPT = loadPrompt()
-const prompt = () => (IS_LOCAL_DEV ? loadPrompt() : PROMPT)
+const PROMPTS = { draw: loadPrompt("river-prompt.md"), reflect: loadPrompt("river-reflect-prompt.md") }
+const FILES = { draw: "river-prompt.md", reflect: "river-reflect-prompt.md" }
+const prompt = (mode: Mode) => (IS_LOCAL_DEV ? loadPrompt(FILES[mode]) : PROMPTS[mode])
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types and the response schema the model is held to
 // ─────────────────────────────────────────────────────────────────────────────
 
+type Mode = "draw" | "reflect"
 type ChatMessage = { role: "user" | "assistant"; content: string }
 type Rest = { on: string; how: (typeof HOWS)[number] }
 type Move = {
@@ -95,9 +115,15 @@ type Move = {
   kind: (typeof KINDS)[number]
   label: string
   rests: Rest[]
+  /** A position the user let go of: the later move that replaced it. */
+  revisedBy?: string
 }
-/** `upTo`: how many messages the river has read so far. */
-type River = { title: string; upTo: number; moves: Move[] }
+/**
+ * `upTo`: how many messages the river has read so far; `reflectedAt`: how
+ * many it had read at its last reflection; `insight`: what that reflection
+ * saw.
+ */
+type River = { title: string; upTo: number; moves: Move[]; reflectedAt: number; insight: string }
 
 const SCHEMA = {
   type: "object",
@@ -135,8 +161,40 @@ const SCHEMA = {
   },
 }
 
+const idList = { type: "array", items: { type: "string" } }
+const edit = (props: Record<string, unknown>) => ({
+  type: "array",
+  items: { type: "object", additionalProperties: false, required: Object.keys(props), properties: props },
+})
+
+const REFLECT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "insight", "adds", "links", "kinds", "merges", "drops", "relabels", "revisions"],
+  properties: {
+    title: { type: "string" },
+    insight: { type: "string" },
+    adds: SCHEMA.properties.moves,
+    links: edit({ from: { type: "string" }, on: { type: "string" }, how: { type: "string", enum: HOWS } }),
+    kinds: edit({ id: { type: "string" }, kind: { type: "string", enum: KINDS } }),
+    merges: edit({ keep: { type: "string" }, drop: idList, label: { type: "string" } }),
+    drops: idList,
+    relabels: edit({ id: { type: "string" }, label: { type: "string" } }),
+    revisions: edit({ id: { type: "string" }, by: { type: "string" } }),
+  },
+}
+
 const clip = (s: unknown, n: number) =>
   typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, n) : ""
+
+/** A label clipped to `n` characters, at a word break if it has spaces. */
+const clipLabel = (s: unknown, n: number) => {
+  const whole = clip(s, Infinity)
+  if (whole.length <= n) return whole
+  const cut = whole.slice(0, n)
+  const space = cut.lastIndexOf(" ")
+  return space > n / 2 ? cut.slice(0, space) : cut
+}
 
 /**
  * Appends moves to a river, keeping only what's well-formed: known kinds and
@@ -145,20 +203,20 @@ const clip = (s: unknown, n: number) =>
  * no later than itself. Used both on the client's previous river (from 1)
  * and on the model's new moves (after what the river has read).
  */
-const appendMoves = (river: Move[], input: unknown, from: number, to: number): Move[] => {
+const appendMoves = (river: Move[], input: unknown, from: number, to: number, maxRests = MAX_RESTS): Move[] => {
   const out = [...river]
   const byId = new Map(out.map((m) => [m.id, m]))
   for (const raw of (Array.isArray(input) ? input : []) as Record<string, any>[]) {
     if (out.length >= MAX_MOVES) break
     const id = clip(raw?.id, 24)
-    const label = clip(raw?.label, MAX_LABEL_CHARS)
+    const label = clipLabel(raw?.label, MAX_LABEL_CHARS)
     const at = Number(raw?.at)
     if (!id || !label || byId.has(id) || !Number.isInteger(at) || at < from || at > to) continue
     if (out.length && at < out[out.length - 1].at) continue
     const rests: Rest[] = []
     for (const r of (Array.isArray(raw.rests) ? raw.rests : []) as Record<string, any>[]) {
       const on = byId.get(clip(r?.on, 24))
-      if (!on || on.at > at || rests.some((x) => x.on === on.id) || rests.length >= MAX_RESTS) continue
+      if (!on || on.at > at || rests.some((x) => x.on === on.id) || rests.length >= maxRests) continue
       rests.push({ on: on.id, how: HOWS.includes(r.how) ? r.how : "builds" })
     }
     const move: Move = {
@@ -178,10 +236,144 @@ const appendMoves = (river: Move[], input: unknown, from: number, to: number): M
 const sanitizeRiver = (input: unknown, messageCount: number): River => {
   const raw = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>
   const upTo = Math.min(messageCount, Math.max(0, Math.floor(Number(raw.upTo) || 0)))
+  const moves = appendMoves([], raw.moves, 1, upTo, MAX_RESTS_REFLECTED)
+  // A revision points forward, to a later move by the user.
+  const order = new Map(moves.map((m, i) => [m.id, i]))
+  const rawMoves = (Array.isArray(raw.moves) ? raw.moves : []) as Record<string, any>[]
+  const revisedBy = new Map(rawMoves.map((m) => [clip(m?.id, 24), clip(m?.revisedBy, 24)]))
+  for (const [i, m] of moves.entries()) {
+    const by = revisedBy.get(m.id)
+    if (by && (order.get(by) ?? -1) > i && m.by === "user") m.revisedBy = by
+  }
   return {
     title: clip(raw.title, MAX_TITLE_CHARS),
     upTo,
-    moves: appendMoves([], raw.moves, 1, upTo),
+    moves,
+    reflectedAt: Math.min(upTo, Math.max(0, Math.floor(Number(raw.reflectedAt) || 0))),
+    insight: clip(raw.insight, MAX_INSIGHT_CHARS),
+  }
+}
+
+/**
+ * Applies a reflection's edits to a river, each checked against it: ids must
+ * exist, links point back in time, merges join one speaker's moves, and only
+ * so many of each are taken. Removing a move passes its links on, so what
+ * rested on it still rests on something.
+ */
+const applyReflection = (river: River, answer: Record<string, any>): River => {
+  const take = <T,>(v: unknown, n: number) => (Array.isArray(v) ? (v as T[]).slice(0, n) : [])
+  let moves = river.moves.map((m) => ({ ...m, rests: [...m.rests] }))
+  const find = (id: unknown) => moves.find((m) => m.id === clip(id, 24))
+  const orderOf = () => new Map(moves.map((m, i) => [m.id, i]))
+
+  for (const r of take<Record<string, any>>(answer.relabels, MAX_EDITS.relabels)) {
+    const m = find(r?.id)
+    const label = clipLabel(r?.label, MAX_LABEL_CHARS)
+    if (m && label) m.label = label
+  }
+  for (const k of take<Record<string, any>>(answer.kinds, MAX_EDITS.kinds)) {
+    const m = find(k?.id)
+    // Hindsight can find a realization, never take one back: the user may
+    // already have seen it light up.
+    if (!m || !KINDS.includes(k?.kind) || m.kind === "realization") continue
+    if (k.kind === "realization" && realizationsIn(moves) >= realizationBudget(river.upTo)) continue
+    m.kind = k.kind
+  }
+
+  // Moves the near-sighted draw missed, each slotted in at its message.
+  const usedIds = new Set(moves.map((m) => m.id))
+  for (const raw of take<Record<string, any>>(answer.adds, MAX_EDITS.adds)) {
+    const id = clip(raw?.id, 24)
+    const label = clipLabel(raw?.label, MAX_LABEL_CHARS)
+    const at = Number(raw?.at)
+    if (!id || usedIds.has(id) || !label || !Number.isInteger(at) || at < 1 || at > river.upTo) continue
+    let index = moves.length
+    while (index > 0 && moves[index - 1].at > at) index--
+    const before = new Set(moves.slice(0, index).map((m) => m.id))
+    const rests: Rest[] = []
+    for (const r of (Array.isArray(raw.rests) ? raw.rests : []) as Record<string, any>[]) {
+      const on = clip(r?.on, 24)
+      if (!before.has(on) || rests.some((x) => x.on === on) || rests.length >= MAX_RESTS) continue
+      rests.push({ on, how: HOWS.includes(r.how) ? r.how : "builds" })
+    }
+    const kind = KINDS.includes(raw.kind) ? raw.kind : "claim"
+    const overBudget = kind === "realization" && realizationsIn(moves) >= realizationBudget(river.upTo)
+    moves.splice(index, 0, {
+      id,
+      at,
+      by: raw.by === "delphi" ? "delphi" : "user",
+      kind: overBudget ? "claim" : kind,
+      label,
+      rests,
+    })
+    usedIds.add(id)
+  }
+
+  /** Takes a move out, sending what rested on it to `to` (a move or its own rests). */
+  const remove = (id: string, to: string | null) => {
+    const gone = moves.find((m) => m.id === id)
+    if (!gone) return
+    moves = moves.filter((m) => m.id !== id)
+    const order = orderOf()
+    for (const m of moves) {
+      const i = m.rests.findIndex((r) => r.on === id)
+      if (i < 0) continue
+      const [old] = m.rests.splice(i, 1)
+      const heirs = to ? [{ on: to, how: old.how }] : gone.rests
+      for (const h of heirs) {
+        const ok = (order.get(h.on) ?? Infinity) < (order.get(m.id) ?? -1)
+        if (ok && h.on !== m.id && !m.rests.some((r) => r.on === h.on)) m.rests.push({ on: h.on, how: old.how })
+      }
+      m.rests = m.rests.slice(0, MAX_RESTS_REFLECTED)
+    }
+    for (const m of moves) if (m.revisedBy === id) m.revisedBy = to ?? undefined
+  }
+
+  for (const g of take<Record<string, any>>(answer.merges, MAX_EDITS.merges)) {
+    const group = [g?.keep, ...take<unknown>(g?.drop, 10)].map(find).filter((m): m is Move => !!m)
+    const unique = [...new Set(group)]
+    // One speaker's repeats; or realizations, whoever reached them, that are one insight.
+    const sameSpeaker = unique.every((m) => m.by === unique[0].by)
+    const realizations = unique.every((m) => m.kind === "realization")
+    if (unique.length < 2 || !(sameSpeaker || realizations)) continue
+    // The earliest stays, where the thought first appeared.
+    const order = orderOf()
+    unique.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    const [keep, ...rest] = unique
+    const label = clipLabel(g?.label, MAX_LABEL_CHARS)
+    if (label) keep.label = label
+    if (rest.some((m) => m.kind === "realization")) keep.kind = "realization"
+    for (const m of rest) remove(m.id, keep.id)
+  }
+  for (const id of take<unknown>(answer.drops, MAX_EDITS.drops)) {
+    const m = find(id)
+    // A realization is never dropped.
+    if (m && m.kind !== "realization") remove(m.id, null)
+  }
+
+  let order = orderOf()
+  for (const l of take<Record<string, any>>(answer.links, MAX_EDITS.links)) {
+    const from = find(l?.from)
+    const on = find(l?.on)
+    if (!from || !on || (order.get(on.id) ?? Infinity) >= (order.get(from.id) ?? -1)) continue
+    if (from.rests.some((r) => r.on === on.id) || from.rests.length >= MAX_RESTS_REFLECTED) continue
+    from.rests.push({ on: on.id, how: HOWS.includes(l?.how) ? l.how : "builds" })
+  }
+  order = orderOf()
+  for (const r of take<Record<string, any>>(answer.revisions, MAX_EDITS.revisions)) {
+    const old = find(r?.id)
+    const by = find(r?.by)
+    if (old && by && old.by === "user" && (order.get(by.id) ?? -1) > (order.get(old.id) ?? Infinity)) {
+      old.revisedBy = by.id
+    }
+  }
+
+  return {
+    title: clip(answer.title, MAX_TITLE_CHARS) || river.title,
+    upTo: river.upTo,
+    moves,
+    reflectedAt: river.upTo,
+    insight: clip(answer.insight, MAX_INSIGHT_CHARS) || river.insight,
   }
 }
 
@@ -211,11 +403,41 @@ const transcriptOf = (all: ChatMessage[], from: number): string => {
   return kept.join("\n\n")
 }
 
+const budgetLine = (moves: Move[], messages: number) => {
+  const have = realizationsIn(moves)
+  const budget = realizationBudget(messages)
+  return have >= budget
+    ? `The river already has ${have} realizations, the most a conversation this long gets: add none.`
+    : `The river has ${have} of at most ${budget} realizations for a conversation this long; add one only if it's truly earned.`
+}
+
+const nextIdOf = (river: River) =>
+  river.moves.reduce((n, m) => Math.max(n, Number(m.id.replace(/\D/g, "")) || 0), 0) + 1
+
+/** A reflection's request: the whole conversation (as much as fits) and the whole river. */
+const reflectBrief = (all: ChatMessage[], river: River): string =>
+  [
+    "<conversation>",
+    transcriptOf(all, all.length + 1),
+    "</conversation>",
+    "",
+    "<river>",
+    JSON.stringify({
+      title: river.title,
+      insight: river.insight,
+      moves: river.moves.map(({ id, at, by, kind, label, rests, revisedBy }) => ({ id, at, by, kind, label, rests, ...(revisedBy ? { revisedBy } : {}) })),
+    }),
+    "</river>",
+    "",
+    `Reflect on the river: ${river.moves.length} moves over ${all.length} messages. Any added moves take ids from m${nextIdOf(river)}.`,
+    budgetLine(river.moves, all.length),
+  ].join("\n")
+
 /** The request as one message: the conversation, the river so far, and what to draw. */
 const brief = (all: ChatMessage[], river: River): string => {
   const from = river.upTo + 1
   const count = all.length - river.upTo
-  const nextId = river.moves.reduce((n, m) => Math.max(n, Number(m.id.replace(/\D/g, "")) || 0), 0) + 1
+  const nextId = nextIdOf(river)
   const sofar = river.moves.map((m) => ({ id: m.id, at: m.at, by: m.by, kind: m.kind, label: m.label }))
   return [
     "<conversation>",
@@ -232,6 +454,7 @@ const brief = (all: ChatMessage[], river: River): string => {
     // Left to itself the model boils a conversation down to a few moves; a
     // concrete number keeps the river as full as the talk was.
     `That's ${count} messages: expect about ${Math.max(1, Math.round(count * 0.7))} moves, fewer if they're thin.`,
+    budgetLine(river.moves, all.length),
   ].join("\n")
 }
 
@@ -340,7 +563,7 @@ export default async (req: Request, _context: Context) => {
   const apiKey = Netlify.env.get("OPENROUTER_API_KEY")
   if (!apiKey) return json({ code: "unavailable" }, 503)
 
-  let body: { messages?: unknown; river?: unknown }
+  let body: { messages?: unknown; river?: unknown; mode?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -349,8 +572,14 @@ export default async (req: Request, _context: Context) => {
   const messages = validateMessages(body.messages)
   if (!messages) return json({ code: "invalid_request" }, 400)
   const previous = sanitizeRiver(body.river, messages.length)
-  // Nothing new to read (a reply that failed, say): the river stands.
-  if (previous.upTo >= messages.length) return json({ river: previous }, 200)
+  const mode: Mode = body.mode === "reflect" ? "reflect" : "draw"
+  // A draw with nothing new to read (a reply that failed, say), or a
+  // reflection on a river that hasn't caught up or has too little in it: the
+  // river stands.
+  if (mode === "draw" && previous.upTo >= messages.length) return json({ river: previous }, 200)
+  if (mode === "reflect" && (previous.upTo < messages.length || previous.moves.length < 4)) {
+    return json({ river: previous }, 200)
+  }
 
   let upstream: Response
   try {
@@ -364,18 +593,22 @@ export default async (req: Request, _context: Context) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        // Speed matters more than depth: the river should land soon after
-        // Delphi's reply does.
+        max_tokens: mode === "draw" ? MAX_OUTPUT_TOKENS : REFLECT_OUTPUT_TOKENS,
+        // Speed matters more than depth: a draw should land soon after
+        // Delphi's reply does, and a reflection's hindsight comes from
+        // reading the whole conversation, not from thinking longer.
         reasoning: { effort: "minimal" },
         usage: { include: true },
         response_format: {
           type: "json_schema",
-          json_schema: { name: "thought_river", strict: true, schema: SCHEMA },
+          json_schema:
+            mode === "draw"
+              ? { name: "thought_river", strict: true, schema: SCHEMA }
+              : { name: "river_reflection", strict: true, schema: REFLECT_SCHEMA },
         },
         messages: [
-          { role: "system", content: prompt() },
-          { role: "user", content: brief(messages, previous) },
+          { role: "system", content: prompt(mode) },
+          { role: "user", content: mode === "draw" ? brief(messages, previous) : reflectBrief(messages, previous) },
         ],
       }),
       signal: req.signal,
@@ -421,10 +654,20 @@ export default async (req: Request, _context: Context) => {
     console.error("river: unparseable model output")
     return json({ river: previous, kept: true }, 200)
   }
+  if (mode === "reflect") return json({ river: applyReflection(previous, answer) }, 200)
+  const moves = appendMoves(previous.moves, answer.moves, previous.upTo + 1, messages.length)
+  // Past the budget, a new "realization" is drawn as the claim it otherwise is.
+  let room = realizationBudget(messages.length) - realizationsIn(previous.moves)
+  for (const m of moves.slice(previous.moves.length)) {
+    if (m.kind !== "realization") continue
+    if (room > 0) room--
+    else m.kind = "claim"
+  }
   const river: River = {
+    ...previous,
     title: clip(answer.title, MAX_TITLE_CHARS) || previous.title,
     upTo: messages.length,
-    moves: appendMoves(previous.moves, answer.moves, previous.upTo + 1, messages.length),
+    moves,
   }
   return json({ river }, 200)
 }

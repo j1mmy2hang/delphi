@@ -13,7 +13,7 @@ A move is one step in the thinking. Not every message has one; a long message ca
   - `claim` — something asserted: a belief, a want, a reading, an explanation. Most moves are claims.
   - `evidence` — a concrete fact, example or experience offered in support ("高中做的项目没什么影响力").
   - `realization` — the rare move where earlier, separate threads come together into something neither said before, or where a stated position turns. See below.
-- `label`: the move in a few words, in the language of the conversation. For a user move, close to the user's own words ("一个人做项目很累"). For a Delphi move, what Delphi said or asked, addressed as it was ("你欣赏的是氛围和身份", "为什么是斯坦福？"). Questions end with a question mark; nothing else has trailing punctuation. 4–10 Chinese characters is right and 12 is the limit, or at most 7 English words: cut to the heart ("我在构建一个想象的而非真实需要的社区" → "在建一个想象的社区"). Never a topic ("家庭因素"), always the step itself.
+- `label`: the move in a few words, in the language of the conversation. For a user move, close to the user's own words ("一个人做项目很累"). For a Delphi move, what Delphi said or asked, addressed as it was ("你欣赏的是氛围和身份", "为什么是斯坦福？"). Questions end with a question mark; nothing else has trailing punctuation. 4–10 Chinese characters is right and 12 is the limit, or 2–5 English words (6 at most, about 40 letters): cut to the heart ("我在构建一个想象的而非真实需要的社区" → "在建一个想象的社区"). Never a topic ("家庭因素"), always the step itself.
 - `rests`: the 1–3 earlier moves this one directly depends on, with `how`:
   - `builds` — takes it further, explains it, follows from it.
   - `answers` — responds to a question.
@@ -33,7 +33,7 @@ A realization is the reason the river exists, so it has to be real. It's either:
 - a move that brings together two or more earlier threads from different parts of the conversation into something new — and `rests` on them; or
 - the moment the user's stated position turns ("我不知道我信什么" after insisting on a belief).
 
-It can come from either speaker. In a long, good conversation there might be one for every ten messages or so; in a short or shallow one there may be none, and that's right. Never make an ordinary claim a realization to have one.
+It can come from either speaker. A whole conversation gets only a few — three at most for a short one, five for a long one — so that each one means something; you're told how many the river has and how many it may still have. A shallow conversation may have none, and that's right. Never make an ordinary claim a realization to have one.
 
 ## Ids and the title
 

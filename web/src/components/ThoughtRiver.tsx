@@ -58,8 +58,10 @@ const useGlide = (target: Map<string, Point>, instant: boolean) => {
  * everything after it, so the whole lineage would light up the whole river.
  */
 const lineageOf = (id: string, byId: Map<string, Move>): Set<string> => {
-  const seen = new Set([id])
-  let frontier = [id]
+  // What it grew from includes any position it replaced.
+  const replaced = [...byId.values()].filter((m) => m.revisedBy === id).map((m) => m.id)
+  const seen = new Set([id, ...replaced])
+  let frontier = [id, ...replaced]
   for (let hop = 0; hop < 2; hop++) {
     frontier = frontier.flatMap((m) => (byId.get(m)?.rests ?? []).map((r) => r.on)).filter((m) => !seen.has(m))
     for (const m of frontier) seen.add(m)
@@ -122,7 +124,9 @@ export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, sele
     if (!hovered || lineage) return null
     const n = new Set([hovered])
     for (const r of byId.get(hovered)?.rests ?? []) n.add(r.on)
-    for (const m of moves) if (m.rests.some((r) => r.on === hovered)) n.add(m.id)
+    for (const m of moves) if (m.rests.some((r) => r.on === hovered) || m.revisedBy === hovered) n.add(m.id)
+    const replacement = byId.get(hovered)?.revisedBy
+    if (replacement) n.add(replacement)
     return n
   }, [hovered, lineage, byId, moves])
   const focus = lineage ?? neighbours
@@ -190,6 +194,26 @@ export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, sele
             )
           }),
         )}
+        {/* A position let go of, joined by a dotted line to what replaced it. */}
+        {moves.map((m) => {
+          const a = pos.get(m.id)
+          const b = m.revisedBy ? pos.get(m.revisedBy) : undefined
+          if (!a || !b || !m.revisedBy) return null
+          const on = focus ? focus.has(m.id) && focus.has(m.revisedBy) : true
+          return (
+            <motion.path
+              key={`revised:${m.id}`}
+              d={linkPath(a, b, layout.lanes)}
+              stroke="var(--muted-foreground)"
+              strokeWidth={1.1}
+              strokeDasharray="1 3.5"
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: on ? 0.7 : 0.1 }}
+              transition={{ pathLength: { duration: 1.2, ease: 'easeOut' }, opacity: { duration: 0.3 } }}
+            />
+          )
+        })}
       </g>
 
       {/* The moves. */}
@@ -199,13 +223,15 @@ export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, sele
         if (!p || !at) return null
         const realization = m.kind === 'realization'
         const isSelected = selected === m.id
+        // Let go of: still on the river, as a record of the turn, but faded.
+        const revised = !!m.revisedBy && !isSelected
         const r = realization ? 6 : m.kind === 'question' ? 4 : 2.5 + Math.min(3, (weight.get(m.id) ?? 0) * 0.6)
         const ink = realization || isSelected ? 'var(--foreground)' : 'var(--muted-foreground)'
         return (
           <motion.g
             key={m.id}
             initial={{ opacity: 0 }}
-            animate={{ opacity: lit(m.id) ? 1 : 0.18 }}
+            animate={{ opacity: lit(m.id) ? (revised ? 0.45 : 1) : 0.18 }}
             transition={{ duration: 0.4 }}
             onPointerEnter={() => setHovered(m.id)}
             onPointerLeave={() => setHovered(null)}
@@ -218,17 +244,18 @@ export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, sele
             {/* A wider, invisible target than the dot itself. */}
             <circle cx={p.x} cy={p.y} r={12} fill="transparent" data-move={m.id} />
             {realization && <circle cx={p.x} cy={p.y} r={22} fill="url(#river-glow)" />}
-            {(m.id === openEnd || realization) && !reduceMotion && (
+
+            {m.id === openEnd && !reduceMotion && (
               <motion.circle
                 cx={p.x}
                 cy={p.y}
                 r={r}
                 fill="none"
-                stroke={realization ? 'var(--river-gold)' : 'var(--muted-foreground)'}
+                stroke="var(--muted-foreground)"
                 strokeWidth={1}
                 initial={{ opacity: 0.6, scale: 1 }}
                 animate={{ opacity: 0, scale: 2.6 }}
-                transition={{ duration: 2.2, repeat: m.id === openEnd ? Infinity : 1, ease: 'easeOut' }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeOut' }}
                 style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
               />
             )}

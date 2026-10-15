@@ -162,6 +162,7 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
       title: river.title,
       from: moves.find((m) => m.by === 'user')?.label ?? '',
       to: realizations.at(-1)?.label ?? '',
+      insight: river.insight,
       lanes: laneNames.map(([name, y]) => ({ name, y })),
     })
   }
@@ -188,14 +189,15 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
               {river.title || 'The shape of your thinking'}
             </h2>
             <AnimatePresence>
-              {status === 'drawing' && (
+              {(status === 'drawing' || status === 'reflecting') && (
                 <motion.span
+                  key={status}
                   className="shrink-0 text-xs text-muted-foreground"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: [0.4, 1, 0.4], transition: { duration: 1.8, repeat: Infinity } }}
                   exit={{ opacity: 0 }}
                 >
-                  drawing…
+                  {status === 'drawing' ? 'drawing…' : 'reflecting…'}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -227,6 +229,20 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
               </button>
             </div>
           </header>
+          {/* What the last reflection saw: the river, said in a sentence. */}
+          <AnimatePresence initial={false} mode="wait">
+            {river.insight && (
+              <motion.p
+                key={river.insight}
+                className={`-mt-1 shrink-0 px-4 pb-1.5 font-serif text-[14px] leading-snug text-muted-foreground ${expanded ? '' : 'line-clamp-2'}`}
+                initial={{ opacity: 0, y: -3 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } }}
+                exit={{ opacity: 0, transition: { duration: 0.2 } }}
+              >
+                {river.insight}
+              </motion.p>
+            )}
+          </AnimatePresence>
 
           <div ref={ref} className="relative min-h-0 flex-1">
             <div
@@ -334,6 +350,8 @@ const MoveCard = ({
     return r ? [{ m, how: r.how }] : []
   })
   const realization = move.kind === 'realization'
+  const replacement = move.revisedBy ? byId.get(move.revisedBy) : undefined
+  const replaced = moves.filter((m) => m.revisedBy === move.id)
   const gap = 18
   return (
     <motion.div
@@ -358,6 +376,8 @@ const MoveCard = ({
         </p>
         <h3 className="mt-1 font-serif text-[17px] leading-snug text-foreground">{move.label}</h3>
         {message && <Quote text={said(message)} />}
+        {replacement && <Turn title="Later let go, for" moves={[replacement]} onSelect={onSelect} />}
+        {replaced.length > 0 && <Turn title="Moved on from" moves={replaced} onSelect={onSelect} />}
         {from.length > 0 && <MoveList title="Incoming" items={from} onSelect={onSelect} />}
         {to.length > 0 && <MoveList title="Outgoing" items={to} onSelect={onSelect} />}
       </div>
@@ -421,6 +441,25 @@ const MoveList = ({
   </div>
 )
 
+/** A turn in the user's position: what this move gave way to, or what it replaced. */
+const Turn = ({ title, moves, onSelect }: { title: string; moves: Move[]; onSelect: (id: string) => void }) => (
+  <div className="mt-3">
+    <p className="text-[11px] font-medium text-foreground">{title}</p>
+    <ul className="mt-1 space-y-0.5">
+      {moves.map((m) => (
+        <li key={m.id}>
+          <button
+            onClick={() => onSelect(m.id)}
+            className="w-full rounded-md px-1.5 py-1 -mx-1.5 text-left text-[12.5px] leading-snug text-foreground transition-colors hover:bg-secondary"
+          >
+            {m.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  </div>
+)
+
 const Key = ({ mark, children }: { mark: ReactNode; children: string }) => (
   <li className="flex items-center gap-2.5">
     <svg width="16" height="10" className="shrink-0 overflow-visible" aria-hidden>
@@ -451,6 +490,11 @@ const Legend = () => (
       <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.1" />}>Builds on</Key>
       <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.1" strokeDasharray="4 3" />}>Challenges</Key>
       <Key mark={<line x1="0" y1="5" x2="16" y2="5" stroke="var(--river-gold)" strokeWidth="1.4" />}>Leads to a realization</Key>
+      <Key
+        mark={<line x1="0" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1 3.5" strokeLinecap="round" />}
+      >
+        Moved on from
+      </Key>
     </ul>
   </div>
 )

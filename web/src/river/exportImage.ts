@@ -49,6 +49,8 @@ export interface CardText {
   /** The user's first move, and the latest realization; either can be ''. */
   from: string
   to: string
+  /** What the last reflection saw; '' if none yet. */
+  insight: string
   /** The lanes' names and heights in the SVG; on screen they're drawn over it. */
   lanes: { name: string; y: number }[]
 }
@@ -66,7 +68,7 @@ export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
 
   const pad = 44
   const head = 96
-  const foot = 92
+  const foot = text.insight ? 124 : 92
   // Sharp on a retina screen, but a long river stays a sensible file.
   const scale = Math.min(2, 8000 / (width + pad * 2))
   const canvas = document.createElement('canvas')
@@ -105,7 +107,13 @@ export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
   for (const lane of text.lanes) ctx.fillText(lane.name, pad + 4, head + lane.y)
   ctx.textBaseline = 'alphabetic'
 
-  const y = head + height + 46
+  let y = head + height + 46
+  if (text.insight) {
+    ctx.fillStyle = ink
+    ctx.font = `17px ${serif}`
+    ctx.fillText(text.insight, pad, y, cardWidth - pad * 2)
+    y += 32
+  }
   ctx.font = `15px ${sans}`
   if (text.from && text.to) {
     // From where it began to what it realized: the conversation in a line.
