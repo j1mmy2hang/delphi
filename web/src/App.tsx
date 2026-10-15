@@ -28,6 +28,8 @@ import { ThemeToggle } from './components/ThemeToggle'
 import { ThoughtRiverButton } from './components/ThoughtRiverButton'
 import { ThoughtRiverPanel } from './components/ThoughtRiverPanel'
 import { EASE_IN, EASE_OUT, FLOATING_BUTTON, SPRING_GLIDE } from './constants'
+import { ConversationClosed } from './components/ConversationClosed'
+import { closingIndex } from './chat/closing'
 import { useChatStream } from './hooks/useChatStream'
 import { useConversationLibrary, type LibraryEntry } from './hooks/useConversationLibrary'
 import { useMobileViewport } from './hooks/useMobileViewport'
@@ -48,11 +50,11 @@ function App() {
   const { save, generation } = library
   // Identity of the conversation on screen. Set on its first message (or when
   // a saved one is opened); null on the home screen.
-  const [meta, setMeta] = useState<{ id: string; created: string; title?: string } | null>(null)
+  const [meta, setMeta] = useState<{ id: string; created: string; title?: string; closed?: string } | null>(null)
   // What was last written, and to which folder (generation) — so a re-render
   // never rewrites a file, but switching folders writes the open conversation
   // into the new one.
-  const savedRef = useRef<{ messages: ChatMessage[]; generation: number } | null>(null)
+  const savedRef = useRef<{ messages: ChatMessage[]; generation: number; closed?: string } | null>(null)
   // Closed on every visit; opened from the header button or the save status.
   const [historyOpen, setHistoryOpen] = useState(false)
   const showHistory = library.status === 'ready' && historyOpen
@@ -79,7 +81,7 @@ function App() {
   // makes `save` live, which saves the conversation already on screen.
   useEffect(() => {
     const saved = savedRef.current
-    if (!meta || (saved?.messages === messages && saved.generation === generation)) return
+    if (!meta || (saved?.messages === messages && saved.generation === generation && saved.closed === meta.closed)) return
     const last = messages.at(-1)
     const justSent = last?.role === 'assistant' && last.content === ''
     if (isStreaming && !justSent) return
@@ -89,19 +91,30 @@ function App() {
       .filter((m) => m.content.trim())
       .map(({ role, content }): ChatMessage => ({ role, content }))
     if (keep.length === 0) return
-    savedRef.current = { messages, generation }
+    savedRef.current = { messages, generation, closed: meta.closed }
     save({
       id: meta.id,
       created: meta.created,
       title: meta.title ?? titleFrom(keep),
       updated: localISO(),
+      ...(meta.closed ? { closed: meta.closed } : {}),
       messages: keep,
     })
   }, [messages, isStreaming, meta, save, generation])
 
+  // Delphi closes a conversation with its last summary (situation 4). From the
+  // moment that reply begins, nothing more can be sent; once it has finished,
+  // the composer gives way to the ending.
+  const closeAt = closingIndex(messages)
+  const closing = closeAt >= 0
+  const closed = closing && !(isStreaming && closeAt === messages.length - 1)
+  useEffect(() => {
+    if (closing && meta && !meta.closed) setMeta({ ...meta, closed: localISO() })
+  }, [closing, meta])
+
   const handleSubmit = () => {
     const trimmed = input.trim()
-    if (!trimmed) return
+    if (!trimmed || closing) return
     setInput('')
     if (!meta) {
       setMeta({ id: newId(), created: localISO() })
@@ -149,8 +162,8 @@ function App() {
     if (entry.id === meta?.id) return
     const conversation = await library.open(entry)
     if (!conversation) return
-    savedRef.current = { messages: conversation.messages, generation }
-    setMeta({ id: conversation.id, created: conversation.created, title: conversation.title })
+    savedRef.current = { messages: conversation.messages, generation, closed: conversation.closed }
+    setMeta({ id: conversation.id, created: conversation.created, title: conversation.title, closed: conversation.closed })
     setOpenedCount(conversation.messages.length)
     setCascadeFrom(null)
     load(conversation.messages)
@@ -374,34 +387,47 @@ function App() {
           {/* One row: the field and its button side by side. The textarea sizes
               to its content, so it stays a single line until the text wraps; the
               button then holds to the bottom edge. */}
-          <PromptInput onSubmit={handleSubmit}>
-            <PromptInputTextarea
-              value={input}
-              onChange={(e) => setInput(e.currentTarget.value)}
-              placeholder="Say what's on your mind..."
-              rows={1}
-              className="max-h-48 min-h-0 py-3.5 pr-2"
+          {closed ? (
+            <ConversationClosed
+              closed={meta?.closed}
+              onShowRiver={
+                // The river is desktop-only for now.
+                river.river.moves.length > 0 && window.matchMedia('(pointer: fine)').matches
+                  ? () => setRiverOpen(true)
+                  : undefined
+              }
+              onNewChat={handleNewChat}
             />
-            {/* While streaming it's a stop button, not a submit — so Enter in
-                the textarea can't stop a reply or clear the draft. */}
-            {isStreaming ? (
-              <PromptInputSubmit
-                status="streaming"
-                type="button"
-                onClick={stop}
-                aria-label="Stop"
-                className="composer-send"
+          ) : (
+            <PromptInput onSubmit={handleSubmit}>
+              <PromptInputTextarea
+                value={input}
+                onChange={(e) => setInput(e.currentTarget.value)}
+                placeholder="Say what's on your mind..."
+                rows={1}
+                className="max-h-48 min-h-0 py-3.5 pr-2"
               />
-            ) : (
-              <PromptInputSubmit
-                status="ready"
-                disabled={!input.trim()}
-                className="composer-send"
-              >
-                <ArrowUpIcon className="size-4" />
-              </PromptInputSubmit>
-            )}
-          </PromptInput>
+              {/* While streaming it's a stop button, not a submit — so Enter in
+                  the textarea can't stop a reply or clear the draft. */}
+              {isStreaming ? (
+                <PromptInputSubmit
+                  status="streaming"
+                  type="button"
+                  onClick={stop}
+                  aria-label="Stop"
+                  className="composer-send"
+                />
+              ) : (
+                <PromptInputSubmit
+                  status="ready"
+                  disabled={!input.trim()}
+                  className="composer-send"
+                >
+                  <ArrowUpIcon className="size-4" />
+                </PromptInputSubmit>
+              )}
+            </PromptInput>
+          )}
           {/* Where this conversation goes, right under where it's typed. Part
               of the composer block, so it travels with the bar from home to
               chat and stays beneath it. */}

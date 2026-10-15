@@ -25,6 +25,8 @@ export interface LibraryEntry {
   title: string
   updated: string
   fileName: string
+  /** When Delphi closed it, if it has. */
+  closed?: string
 }
 
 const supported = typeof window !== 'undefined' && 'showDirectoryPicker' in window
@@ -86,6 +88,7 @@ export const useConversationLibrary = () => {
           title: meta.title || handle.name.replace(/\.md$/, ''),
           updated: meta.updated || meta.created || '',
           fileName: handle.name,
+          ...(meta.closed ? { closed: meta.closed } : {}),
         })
       } catch {
         // Unreadable file: skip it rather than fail the whole list.
@@ -249,7 +252,7 @@ export const useConversationLibrary = () => {
       await writable.write(serialize(c))
       await writable.close()
 
-      const entry: LibraryEntry = { id: c.id, title: c.title, updated: c.updated, fileName: name }
+      const entry: LibraryEntry = { id: c.id, title: c.title, updated: c.updated, fileName: name, closed: c.closed }
       setEntries((prev) => [entry, ...prev.filter((e) => e.id !== c.id)].sort(byUpdatedDesc))
     }
 

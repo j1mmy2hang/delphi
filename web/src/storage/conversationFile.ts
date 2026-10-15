@@ -9,6 +9,7 @@ import type { Conversation, Message } from '../types'
  *   title: "How do I think more clearly about a hard decision?"
  *   created: 2026-10-13T15:42:10+08:00
  *   updated: 2026-10-13T15:44:02+08:00
+ *   closed: 2026-10-13T16:20:31+08:00      (once Delphi has closed it)
  *   ---
  *
  *   <!-- delphi:user -->
@@ -38,6 +39,7 @@ export const serialize = (c: Conversation): string => {
     `title: ${JSON.stringify(c.title)}`,
     `created: ${c.created}`,
     `updated: ${c.updated}`,
+    ...(c.closed ? [`closed: ${c.closed}`] : []),
     '---',
   ].join('\n')
 
@@ -73,6 +75,7 @@ export const parse = (text: string): Conversation | null => {
     title: meta.title || titleFrom(messages),
     created: meta.created ?? '',
     updated: meta.updated ?? meta.created ?? '',
+    ...(meta.closed ? { closed: meta.closed } : {}),
     messages,
   }
 }

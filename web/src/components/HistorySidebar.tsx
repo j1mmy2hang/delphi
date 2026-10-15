@@ -93,6 +93,14 @@ export const HistorySidebar = ({
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+                      {entry.closed && (
+                        // A small gold seal: Delphi brought this one to a close.
+                        <span
+                          className="size-1.5 shrink-0 self-center rounded-full bg-(--river-gold)"
+                          title="Closed"
+                          aria-label="Closed"
+                        />
+                      )}
                       {/* In flow, so a long title truncates before it; the
                           delete button covers its place on hover. */}
                       <span className="shrink-0 text-xs text-muted-foreground transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0">

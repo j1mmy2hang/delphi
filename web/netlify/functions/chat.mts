@@ -15,8 +15,12 @@ import { dirname, resolve } from "node:path"
  */
 const MODEL = "~anthropic/claude-sonnet-latest"
 
-/** Hard cap on tokens the model may generate per reply. Bounds cost per call. */
-const MAX_OUTPUT_TOKENS = 1200
+/**
+ * Hard cap on tokens the model may generate per reply, reasoning included.
+ * Bounds cost per call. Room for the closing summary (situation 4, 500+
+ * characters plus its reasoning), which is cut off mid-sentence at less.
+ */
+const MAX_OUTPUT_TOKENS = 3000
 
 /**
  * Budget per user (device) per calendar month, in USD, by tier. When a device
@@ -149,6 +153,7 @@ type ErrorCode =
   | "invalid_request"
   | "message_too_long"
   | "conversation_too_long"
+  | "conversation_closed"
   | "upstream_error"
 
 const jsonError = (
@@ -206,6 +211,19 @@ const isAuthorized = (req: Request): boolean => {
 
   const source = req.headers.get("origin") ?? req.headers.get("referer") ?? ""
   return ALLOWED_ORIGINS.some((o) => source.startsWith(o))
+}
+
+/**
+ * Delphi closes a conversation with its situation 4 reply, which carries a
+ * hidden signal: it opens with `<situation 4>` and ends with `<end>`. Either
+ * counts. Keep in sync with src/chat/closing.ts.
+ */
+const CLOSING = /<\s*(?:end|situation\s*4)\s*\/?>/i
+
+/** A user message after a closing reply: the conversation is over. */
+const continuesClosed = (messages: ChatMessage[]): boolean => {
+  const closedAt = messages.findIndex((m) => m.role === "assistant" && CLOSING.test(m.content))
+  return closedAt >= 0 && messages.slice(closedAt + 1).some((m) => m.role === "user")
 }
 
 /** Validate & normalize the client payload. Rejects anything oversized or malformed. */
@@ -402,6 +420,11 @@ export default async (req: Request, _context: Context) => {
 
   const validated = validateMessages((body as { messages?: unknown })?.messages)
   if (!validated.ok) return jsonError(validated.code, validated.error, 400)
+  // The web app stops the user writing after a close; this keeps it closed.
+  // The native app doesn't know about closing yet, so it's left alone.
+  if (!req.headers.get("x-app-token") && continuesClosed(validated.messages)) {
+    return jsonError("conversation_closed", "this conversation has been closed", 409)
+  }
 
   let upstream: Response
   try {

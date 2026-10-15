@@ -391,8 +391,11 @@ const applyReflection = (river: River, answer: Record<string, any>): River => {
   }
 }
 
-/** Delphi's replies can open with a <situation N> tag; it's for the chat model, not part of what was said. */
-const said = (m: ChatMessage) => m.content.replace(/<situation[^>]*>/g, "").trim()
+/**
+ * Delphi's replies can open with a <situation N> tag and end with <end> (the
+ * signal that closes a conversation); they're for the app, not what was said.
+ */
+const said = (m: ChatMessage) => m.content.replace(/<situation[^>]*>|<\s*end\s*\/?>/g, "").trim()
 
 /**
  * What the model reads: the opening message, then as many of the latest as

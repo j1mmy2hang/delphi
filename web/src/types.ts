@@ -17,5 +17,7 @@ export interface Conversation {
   /** ISO 8601 with the local offset, e.g. 2026-10-13T15:42:10+08:00 */
   created: string
   updated: string
+  /** When Delphi closed it (its situation 4 reply); absent while it's open. */
+  closed?: string
   messages: Message[]
 }

@@ -63,8 +63,12 @@ export interface RiverStore {
 
 type Basis = ReturnType<typeof basisOf>
 
-/** Delphi stepping back to sum up (situations 3 and 4): a moment for hindsight. */
-const STEP_BACK = /<situation\s*[34]\s*>/i
+/**
+ * Delphi stepping back to sum up (situations 3 and 4, and the `<end>` that
+ * closes a conversation): a moment for hindsight. A closed conversation's last
+ * reflection gives its river its final gist.
+ */
+const STEP_BACK = /<situation\s*[34]\s*>|<\s*end\s*\/?>/i
 /** Otherwise, a reflection every this many of the user's turns. */
 const TURNS_PER_REFLECTION = 4
 /** Too few moves and there's nothing to see in hindsight yet. */

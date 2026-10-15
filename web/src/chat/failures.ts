@@ -14,6 +14,7 @@ export type FailureCode =
   | 'monthly_limit'
   | 'message_too_long'
   | 'conversation_too_long'
+  | 'conversation_closed'
   | 'unauthorized'
   | 'unavailable'
   | 'upstream_error'
@@ -102,6 +103,12 @@ export const describe = (
         message: 'This conversation has reached its length limit. Start a new chat to keep going.',
         action: 'new-chat',
       }
+    case 'conversation_closed':
+      return {
+        code,
+        message: 'This conversation has come to a close. Start a new one to keep talking.',
+        action: 'new-chat',
+      }
     case 'unauthorized':
       return {
         code,
@@ -135,6 +142,7 @@ const SERVER_CODES = new Set<FailureCode>([
   'monthly_limit',
   'message_too_long',
   'conversation_too_long',
+  'conversation_closed',
   'unauthorized',
   'unavailable',
   'upstream_error',
