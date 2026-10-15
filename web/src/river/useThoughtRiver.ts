@@ -8,7 +8,7 @@ const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_REAL_API !== 'true'
 
 // Bump the version when what a river means changes (its prompt or its shape):
 // rivers saved under an older one are dropped and drawn again.
-const STORAGE_PREFIX = 'delphi-river:v2:'
+const STORAGE_PREFIX = 'delphi-river:v3:'
 
 try {
   for (const key of Object.keys(localStorage)) {
@@ -19,14 +19,23 @@ try {
   // Storage blocked: nothing saved to clear.
 }
 
+/** A saved river, if it is one. */
+const asRiver = (raw: unknown): River | null => {
+  const r = raw as Partial<River> | null
+  return r && typeof r === 'object' && Array.isArray(r.moves) && typeof r.upTo === 'number'
+    ? { ...EMPTY_RIVER, ...r }
+    : null
+}
+
 /**
- * Rivers live in this browser, one per conversation, beside (not inside) the
- * conversation's Markdown file. Losing one costs a single redraw.
+ * Rivers are kept twice: in the conversations folder beside the Markdown files
+ * (see RiverStore), which is the copy that lasts, and in this browser, which
+ * is there at once and covers browsers with no folder.
  */
 const read = (id: string): River | null => {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + id)
-    return raw ? { ...EMPTY_RIVER, ...(JSON.parse(raw) as Partial<River>) } : null
+    return raw ? asRiver(JSON.parse(raw)) : null
   } catch {
     return null
   }
@@ -45,6 +54,12 @@ const basisOf = (messages: Message[]) =>
   messages.filter((m) => m.content.trim()).map(({ role, content }) => ({ role, content }))
 
 export type RiverStatus = 'idle' | 'drawing' | 'reflecting' | 'failed'
+
+/** Where rivers last: the conversations folder, when there is one. */
+export interface RiverStore {
+  load: (id: string) => Promise<unknown>
+  save: (id: string, river: River) => void
+}
 
 type Basis = ReturnType<typeof basisOf>
 
@@ -82,11 +97,23 @@ const callRiver = (request: { messages: Basis; river: River; mode?: 'reflect' },
  * whole conversation again with hindsight and refines the river. Drawing
  * waits for a reflection to finish, so the two never edit at once.
  */
-export const useThoughtRiver = (messages: Message[], conversationId: string | null, streaming: boolean) => {
+export const useThoughtRiver = (
+  messages: Message[],
+  conversationId: string | null,
+  streaming: boolean,
+  store: RiverStore | null,
+) => {
   const [state, setState] = useState<ThoughtRiverState>(EMPTY_STATE)
   const [status, setStatus] = useState<RiverStatus>('idle')
   const stateRef = useRef(state)
   stateRef.current = state
+  const storeRef = useRef(store)
+  storeRef.current = store
+  // The conversation whose saved river has been looked for; drawing waits for
+  // it, so a river in the folder is never drawn again from scratch.
+  const [ready, setReady] = useState<string | null>(null)
+  // Bumped to try again after a failure.
+  const [attempt, setAttempt] = useState(0)
 
   const basis = useMemo(() => basisOf(messages), [messages])
   const basisRef = useRef(basis)
@@ -102,6 +129,7 @@ export const useThoughtRiver = (messages: Message[], conversationId: string | nu
     const prev = stateRef.current
     const next = { river, version: prev.version + (changed ? 1 : 0) }
     write(id, river)
+    storeRef.current?.save(id, river)
     stateRef.current = next
     setState(next)
   }
@@ -134,9 +162,11 @@ export const useThoughtRiver = (messages: Message[], conversationId: string | nu
       })
   }
 
-  // A different conversation: show its saved river, or start empty.
+  // A different conversation: show its saved river, or start empty. The
+  // browser's copy shows at once; the folder's replaces it if it's further on.
   useEffect(() => {
-    const saved = conversationId ? read(conversationId) : null
+    const id = conversationId
+    const saved = id ? read(id) : null
     const next = saved ? { river: saved, version: 0 } : EMPTY_STATE
     // Set the ref now: the drawing effect below runs in this same commit, and
     // must start from this conversation's river, not the last one's.
@@ -144,16 +174,65 @@ export const useThoughtRiver = (messages: Message[], conversationId: string | nu
     setState(next)
     setStatus('idle')
     triedAt.current = -1
+    let cancelled = false
+    const folder = storeRef.current
+    if (!id || !folder) setReady(id)
+    else {
+      setReady(null)
+      folder
+        .load(id)
+        .then((raw) => {
+          if (cancelled) return
+          const kept = asRiver(raw)
+          const current = stateRef.current.river
+          if (kept && kept.upTo >= current.upTo) {
+            write(id, kept)
+            const loaded = { river: kept, version: 0 }
+            stateRef.current = loaded
+            setState(loaded)
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => !cancelled && setReady(id))
+    }
     return () => {
+      cancelled = true
       reflecting.current?.abort()
       reflecting.current = null
     }
   }, [conversationId])
 
+  /**
+   * Throws this conversation's river away, here and in the folder, and draws
+   * it again from the whole conversation (a reflection follows, as ever).
+   */
+  const redraw = () => {
+    const id = conversationId
+    if (!id) return
+    reflecting.current?.abort()
+    reflecting.current = null
+    triedAt.current = -1
+    write(id, EMPTY_RIVER)
+    storeRef.current?.save(id, EMPTY_RIVER)
+    const cleared = { river: EMPTY_RIVER, version: stateRef.current.version }
+    stateRef.current = cleared
+    setState(cleared)
+    setStatus('idle')
+    // Re-runs the drawing effect, which also cancels a draw still under way.
+    setAttempt((n) => n + 1)
+  }
+
+  /** Tries again after a failed draw or reflection. */
+  const retry = () => {
+    triedAt.current = -1
+    setStatus('idle')
+    setAttempt((n) => n + 1)
+  }
+
   useEffect(() => {
     // While a reply streams in, wait for it; a send cancels any drawing still
     // under way, and the next one picks up both exchanges.
-    if (streaming || !conversationId || reflecting.current) return
+    if (streaming || !conversationId || ready !== conversationId || reflecting.current) return
     const id = conversationId
     // Caught up, but owed a reflection (one cut short when the page closed, say).
     if (basis.length <= stateRef.current.river.upTo) {
@@ -167,7 +246,15 @@ export const useThoughtRiver = (messages: Message[], conversationId: string | nu
       .then(async (res) => {
         if (!res.ok) throw new Error(`river ${res.status}`)
         const { river: drawn } = (await res.json()) as { river: River }
+        // Left this conversation meanwhile: its river isn't this one's.
+        if (controller.signal.aborted) return
         const river = { ...EMPTY_RIVER, ...drawn }
+        // The server keeps the river as it was when the model's answer was
+        // unusable; that's a failure to show, not a river to keep.
+        if (river.upTo < basisRef.current.length && river.upTo <= stateRef.current.river.upTo) {
+          setStatus('failed')
+          return
+        }
         commit(id, river, river.moves.length > stateRef.current.river.moves.length)
         setStatus('idle')
         if (reflectionDue(river, basisRef.current)) reflect(id, river)
@@ -181,7 +268,7 @@ export const useThoughtRiver = (messages: Message[], conversationId: string | nu
     return () => controller.abort()
     // `basis.length` stands for the messages: it only grows when one is added.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, basis.length, streaming, reflections])
+  }, [conversationId, basis.length, streaming, reflections, ready, attempt])
 
-  return { ...state, status }
+  return { ...state, status, retry, redraw }
 }

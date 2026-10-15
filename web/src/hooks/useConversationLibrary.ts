@@ -40,6 +40,19 @@ const exists = async (dir: FileSystemDirectoryHandle, name: string) => {
   }
 }
 
+/**
+ * Each conversation's thought river, beside its file: `.delphi/rivers/<id>.json`.
+ * Hidden, as it's for the app rather than for reading; the list only reads
+ * Markdown files, so it never shows up there.
+ */
+const RIVERS = ['.delphi', 'rivers'] as const
+
+const riversDir = async (dir: FileSystemDirectoryHandle, create: boolean) => {
+  let d = dir
+  for (const name of RIVERS) d = await d.getDirectoryHandle(name, { create })
+  return d
+}
+
 const byUpdatedDesc = (a: LibraryEntry, b: LibraryEntry) =>
   Date.parse(b.updated) - Date.parse(a.updated)
 
@@ -213,6 +226,9 @@ export const useConversationLibrary = () => {
     }
     filesRef.current.delete(entry.id)
     queueRef.current.delete(entry.id)
+    await riversDir(dir, false)
+      .then((d) => d.removeEntry(`${entry.id}.json`))
+      .catch(() => undefined)
     setEntries((prev) => prev.filter((e) => e.id !== entry.id))
   }, [])
 
@@ -259,5 +275,47 @@ export const useConversationLibrary = () => {
     }
   }, [scan])
 
-  return { status, folderName, entries, generation, chooseFolder, reconnect, unlink, save, open, remove }
+  /** A conversation's saved river, or null if it has none (or there's no folder). */
+  const loadRiver = useCallback(async (id: string): Promise<unknown> => {
+    const dir = dirRef.current
+    if (!dir || status !== 'ready') return null
+    try {
+      const file = await (await (await riversDir(dir, false)).getFileHandle(`${id}.json`)).getFile()
+      return JSON.parse(await file.text())
+    } catch {
+      return null
+    }
+  }, [status])
+
+  /** Saves a conversation's river, one write at a time, latest last. */
+  const riverQueue = useRef(new Map<string, Promise<void>>())
+  const saveRiver = useCallback((id: string, river: unknown) => {
+    const dir = dirRef.current
+    if (!dir || status !== 'ready') return
+    const write = async () => {
+      const file = await (await riversDir(dir, true)).getFileHandle(`${id}.json`, { create: true })
+      const writable = await file.createWritable()
+      await writable.write(JSON.stringify(river))
+      await writable.close()
+    }
+    const next = (riverQueue.current.get(id) ?? Promise.resolve())
+      .then(write)
+      .catch((err) => console.error('Could not save river', err))
+    riverQueue.current.set(id, next)
+  }, [status])
+
+  return {
+    status,
+    folderName,
+    entries,
+    generation,
+    chooseFolder,
+    reconnect,
+    unlink,
+    save,
+    open,
+    remove,
+    loadRiver,
+    saveRiver,
+  }
 }

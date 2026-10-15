@@ -368,6 +368,20 @@ const applyReflection = (river: River, answer: Record<string, any>): River => {
     }
   }
 
+  // A reflection always leaves at least one realization. If the model found
+  // none, the user's move that most of the river grew from becomes one: the
+  // one with the most links in and out, the later the better on a tie.
+  if (!realizationsIn(moves)) {
+    const degree = new Map(moves.map((m) => [m.id, m.rests.length]))
+    for (const m of moves) for (const r of m.rests) degree.set(r.on, (degree.get(r.on) ?? 0) + 1)
+    let best: Move | undefined
+    for (const m of moves) {
+      if (m.by !== "user" || m.kind === "question" || m.revisedBy) continue
+      if (!best || (degree.get(m.id) ?? 0) >= (degree.get(best.id) ?? 0)) best = m
+    }
+    if (best) best.kind = "realization"
+  }
+
   return {
     title: clip(answer.title, MAX_TITLE_CHARS) || river.title,
     upTo: river.upTo,
@@ -403,9 +417,12 @@ const transcriptOf = (all: ChatMessage[], from: number): string => {
   return kept.join("\n\n")
 }
 
-const budgetLine = (moves: Move[], messages: number) => {
+const budgetLine = (moves: Move[], messages: number, mode: Mode = "reflect") => {
   const have = realizationsIn(moves)
   const budget = realizationBudget(messages)
+  if (!have && mode === "reflect") {
+    return `The river has no realization yet. A reflection always leaves at least one: promote the move where the user's thinking most clearly came together or turned so far (at most ${budget} in all).`
+  }
   return have >= budget
     ? `The river already has ${have} realizations, the most a conversation this long gets: add none.`
     : `The river has ${have} of at most ${budget} realizations for a conversation this long; add one only if it's truly earned.`
@@ -454,7 +471,7 @@ const brief = (all: ChatMessage[], river: River): string => {
     // Left to itself the model boils a conversation down to a few moves; a
     // concrete number keeps the river as full as the talk was.
     `That's ${count} messages: expect about ${Math.max(1, Math.round(count * 0.7))} moves, fewer if they're thin.`,
-    budgetLine(river.moves, all.length),
+    budgetLine(river.moves, all.length, "draw"),
   ].join("\n")
 }
 

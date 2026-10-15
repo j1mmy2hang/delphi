@@ -1,6 +1,6 @@
 /**
- * The river as a card to keep: its title, the river, and the line from where
- * the conversation began to the last thing it realized. Drawn from the live SVG, with every
+ * The river as a card to keep: its title, the river, and the gist the last
+ * reflection saw beneath it. Drawn from the live SVG, with every
  * themed colour resolved, so the card matches what's on screen.
  */
 
@@ -46,9 +46,6 @@ const token = (name: string) =>
 
 export interface CardText {
   title: string
-  /** The user's first move, and the latest realization; either can be ''. */
-  from: string
-  to: string
   /** What the last reflection saw; '' if none yet. */
   insight: string
   /** The lanes' names and heights in the SVG; on screen they're drawn over it. */
@@ -68,7 +65,30 @@ export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
 
   const pad = 44
   const head = 96
-  const foot = text.insight ? 124 : 92
+  // The gist, wrapped to the card: between words, or between characters for
+  // Chinese. At most three lines.
+  const serif = token('--font-serif') || 'Georgia, serif'
+  const GIST = `17px ${serif}`
+  const GIST_LINE = 26
+  const measurer = document.createElement('canvas').getContext('2d')!
+  measurer.font = GIST
+  const gistWidth = width + pad * 2 - pad * 2 - 90
+  const gist: string[] = []
+  if (text.insight) {
+    const spaced = /\s/.test(text.insight)
+    const parts = spaced ? text.insight.split(/\s+/) : [...text.insight]
+    let line = ''
+    for (const part of parts) {
+      const next = line ? line + (spaced ? ' ' : '') + part : part
+      if (line && measurer.measureText(next).width > gistWidth) {
+        gist.push(line)
+        line = part
+      } else line = next
+    }
+    if (line) gist.push(line)
+    if (gist.length > 3) gist.splice(3, Infinity, gist[2] + '…')
+  }
+  const foot = 60 + gist.length * GIST_LINE
   // Sharp on a retina screen, but a long river stays a sensible file.
   const scale = Math.min(2, 8000 / (width + pad * 2))
   const canvas = document.createElement('canvas')
@@ -80,8 +100,6 @@ export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
   const bg = token('--background')
   const ink = token('--foreground')
   const muted = token('--muted-foreground')
-  const gold = token('--river-gold')
-  const serif = token('--font-serif') || 'Georgia, serif'
   const sans = getComputedStyle(document.body).fontFamily
   const cardWidth = width + pad * 2
 
@@ -107,25 +125,11 @@ export const saveRiverCard = async (svg: SVGSVGElement, text: CardText) => {
   for (const lane of text.lanes) ctx.fillText(lane.name, pad + 4, head + lane.y)
   ctx.textBaseline = 'alphabetic'
 
-  let y = head + height + 46
-  if (text.insight) {
-    ctx.fillStyle = ink
-    ctx.font = `17px ${serif}`
-    ctx.fillText(text.insight, pad, y, cardWidth - pad * 2)
-    y += 32
-  }
-  ctx.font = `15px ${sans}`
-  if (text.from && text.to) {
-    // From where it began to what it realized: the conversation in a line.
-    ctx.fillStyle = muted
-    ctx.fillText(text.from, pad, y)
-    let x = pad + ctx.measureText(text.from).width
-    ctx.fillText('  →  ', x, y)
-    x += ctx.measureText('  →  ').width
-    ctx.fillStyle = gold
-    ctx.font = `600 15px ${sans}`
-    ctx.fillText(text.to, x, y)
-  }
+  let y = head + height + 40
+  ctx.fillStyle = ink
+  ctx.font = GIST
+  for (const [i, line] of gist.entries()) ctx.fillText(line, pad, y + i * GIST_LINE)
+  y += Math.max(0, gist.length - 1) * GIST_LINE
   ctx.fillStyle = muted
   ctx.font = `12px ${sans}`
   ctx.textAlign = 'right'

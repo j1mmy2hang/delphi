@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Info, Maximize2, Minimize2, X } from 'lucide-react'
+import { Download, Info, Maximize2, Minimize2, RotateCcw, X } from 'lucide-react'
 import { EASE_IN, EASE_OUT } from '../constants'
 import { saveRiverCard } from '../river/exportImage'
 import { lanesFor } from '../river/layout'
@@ -60,6 +60,10 @@ interface ThoughtRiverPanelProps {
   onClose: () => void
   state: ThoughtRiverState
   status: RiverStatus
+  /** Tries again after a failed draw or reflection. */
+  onRetry: () => void
+  /** Clears the river and draws it again from the whole conversation. */
+  onRedraw: () => void
   /** The conversation, so a selected move can quote the message it came from. */
   messages: Message[]
 }
@@ -70,7 +74,7 @@ interface ThoughtRiverPanelProps {
  * and the conversation stays usable beneath. Time runs right; it scrolls
  * sideways, and keeps the newest moves in view as they arrive.
  */
-export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: ThoughtRiverPanelProps) => {
+export const ThoughtRiverPanel = ({ open, onClose, state, status, onRetry, onRedraw, messages }: ThoughtRiverPanelProps) => {
   const { ref, width, height } = useSize()
   // Leave room under the river for a horizontal scrollbar.
   const riverHeight = Math.max(0, height - 8)
@@ -86,6 +90,15 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
   // of the screen.
   const [expanded, setExpanded] = useState(false)
   const size = panelSize(expanded, useViewport())
+  // While the panel grows or shrinks, the river follows its size frame by
+  // frame; gliding each frame toward a target that moves again next frame
+  // only makes it trail and snap.
+  const [resizing, setResizing] = useState(false)
+  useEffect(() => {
+    setResizing(true)
+    const t = setTimeout(() => setResizing(false), RESIZE.duration * 1000 + 80)
+    return () => clearTimeout(t)
+  }, [expanded])
   const [selected, setSelected] = useState<string | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const { river } = state
@@ -108,6 +121,14 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
     const left = x - el.scrollLeft > el.clientWidth / 2
     setAnchor({ x, y: d.top + d.height / 2 - c.top, left })
   }, [selected, width, height, moves])
+
+  // Opening the panel on a river that failed to draw tries again, once.
+  const failed = status === 'failed'
+  useEffect(() => {
+    if (open && failed) onRetry()
+    // Only on opening: a retry that fails again waits for the button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // A different river (another conversation): nothing selected in it.
   const riverKey = `${moves[0]?.id}:${moves[0]?.label}`
@@ -134,9 +155,11 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
       shownCount.current = 0
       return
     }
-    const first = shownCount.current === 0
+    // Glide along when the river grows; when the panel resizes, stay pinned to
+    // the end, as a smooth scroll restarted every frame stutters.
+    const grew = shownCount.current !== 0 && count > shownCount.current
     shownCount.current = count
-    el.scrollTo({ left: el.scrollWidth, behavior: first ? 'auto' : 'smooth' })
+    el.scrollTo({ left: el.scrollWidth, behavior: grew ? 'smooth' : 'auto' })
   }, [count, open, width])
 
   // A mouse wheel scrolls through time, as there's nothing to scroll down to.
@@ -157,11 +180,8 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
   const save = () => {
     const svg = scroller.current?.querySelector('svg')
     if (!svg) return
-    const realizations = moves.filter((m) => m.kind === 'realization')
     void saveRiverCard(svg, {
       title: river.title,
-      from: moves.find((m) => m.by === 'user')?.label ?? '',
-      to: realizations.at(-1)?.label ?? '',
       insight: river.insight,
       lanes: laneNames.map(([name, y]) => ({ name, y })),
     })
@@ -201,7 +221,27 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
                 </motion.span>
               )}
             </AnimatePresence>
+            {failed && !empty && (
+              <button
+                onClick={onRetry}
+                className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                couldn't update · try again
+              </button>
+            )}
             <div className="ml-auto flex shrink-0 items-center">
+              <button
+                onClick={() => {
+                  setSelected(null)
+                  onRedraw()
+                }}
+                disabled={status === 'drawing'}
+                className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                aria-label="Redraw thought river"
+                title="Redraw"
+              >
+                <RotateCcw className="size-4" />
+              </button>
               <button
                 onClick={save}
                 disabled={empty}
@@ -247,7 +287,9 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
           <div ref={ref} className="relative min-h-0 flex-1">
             <div
               ref={scroller}
-              className="absolute inset-0 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]"
+              // The scrollbar would blink on and off as the river and the
+              // panel trade places mid-resize; its room is kept either way.
+              className={`absolute inset-0 overflow-x-auto overflow-y-hidden ${resizing ? '[scrollbar-width:none]' : '[scrollbar-width:thin]'}`}
             >
               <div ref={content} className="relative h-full w-max">
                 {width > 0 && height > 0 && !empty && (
@@ -257,6 +299,7 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
                     height={riverHeight}
                     selected={selected}
                     onSelect={setSelected}
+                    instant={resizing}
                   />
                 )}
                 <AnimatePresence>
@@ -289,10 +332,21 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, messages }: Th
               </div>
             )}
             {!empty && <Legend />}
-            {empty && (
+            {empty && !failed && (
               <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-16 text-center font-serif text-[15px] text-muted-foreground italic">
                 {status === 'drawing' ? '' : 'As you talk, the shape of your thinking appears here.'}
               </p>
+            )}
+            {empty && failed && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-16 text-center">
+                <p className="font-serif text-[15px] text-muted-foreground">Couldn't draw the river this time.</p>
+                <button
+                  onClick={onRetry}
+                  className="rounded-full border border-border px-3.5 py-1.5 text-xs text-foreground transition-colors hover:bg-secondary"
+                >
+                  Try again
+                </button>
+              </div>
             )}
           </div>
 

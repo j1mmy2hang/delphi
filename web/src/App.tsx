@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUpIcon, MessageCirclePlus, PanelLeft } from 'lucide-react'
 import {
@@ -61,7 +61,12 @@ function App() {
 
   // The thought river: drawn beside the chat by a second model, once each
   // reply is complete. The button lights up when it grows unseen.
-  const river = useThoughtRiver(messages, meta?.id ?? null, isStreaming)
+  // Kept in the conversations folder beside the transcripts, when there is one.
+  const riverStore = useMemo(
+    () => (library.status === 'ready' ? { load: library.loadRiver, save: library.saveRiver } : null),
+    [library.status, library.loadRiver, library.saveRiver],
+  )
+  const river = useThoughtRiver(messages, meta?.id ?? null, isStreaming, riverStore)
   const [riverOpen, setRiverOpen] = useState(false)
   const [riverSeen, setRiverSeen] = useState(0)
   useEffect(() => {
@@ -177,6 +182,8 @@ function App() {
         onClose={() => setRiverOpen(false)}
         state={river}
         status={river.status}
+        onRetry={river.retry}
+        onRedraw={river.redraw}
         messages={messages}
       />
       <div className="relative mx-auto flex h-(--app-height,100dvh) min-w-0 flex-1 flex-col overflow-hidden">

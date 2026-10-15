@@ -6,11 +6,19 @@ import type { Move, River } from '../river/types'
 const GLIDE_MS = 600
 
 let measurer: CanvasRenderingContext2D | null = null
+// Labels are measured on every layout, and while the panel resizes that's
+// every frame: remember what's been measured.
+const widths = new Map<string, number>()
 const textWidth = (text: string, size: number, weight: number, family: string) => {
+  const key = `${weight} ${size}px ${family}|${text}`
+  const known = widths.get(key)
+  if (known !== undefined) return known
   measurer ??= document.createElement('canvas').getContext('2d')
   if (!measurer) return text.length * size
   measurer.font = `${weight} ${size}px ${family}`
-  return measurer.measureText(text).width
+  const width = measurer.measureText(text).width
+  widths.set(key, width)
+  return width
 }
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
@@ -21,18 +29,18 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
  * New moves appear where they belong.
  */
 const useGlide = (target: Map<string, Point>, instant: boolean) => {
-  const [shown, setShown] = useState(target)
-  const shownRef = useRef(shown)
-  shownRef.current = shown
+  // What's on screen. State only to re-render while gliding; instant moves
+  // render the target directly, without a second render to copy it over.
+  const [, setFrame] = useState(0)
+  const shownRef = useRef(target)
 
   useEffect(() => {
-    const from = new Map<string, Point>()
-    for (const [id, to] of target) from.set(id, shownRef.current.get(id) ?? to)
-    shownRef.current = from
     if (instant) {
-      setShown(target)
+      shownRef.current = target
       return
     }
+    const from = new Map<string, Point>()
+    for (const [id, to] of target) from.set(id, shownRef.current.get(id) ?? to)
     let raf = 0
     const start = performance.now()
     const step = (now: number) => {
@@ -42,14 +50,15 @@ const useGlide = (target: Map<string, Point>, instant: boolean) => {
         const a = from.get(id) ?? to
         next.set(id, { x: a.x + (to.x - a.x) * t, y: a.y + (to.y - a.y) * t })
       }
-      setShown(next)
+      shownRef.current = next
+      setFrame((n) => n + 1)
       if (t < 1) raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
   }, [target, instant])
 
-  return shown
+  return instant ? target : shownRef.current
 }
 
 /**
@@ -76,9 +85,11 @@ interface ThoughtRiverProps {
   height: number
   selected: string | null
   onSelect: (id: string | null) => void
+  /** Follow the layout without gliding (the panel is resizing). */
+  instant?: boolean
 }
 
-export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, selected, onSelect }: ThoughtRiverProps) => {
+export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, selected, onSelect, instant = false }: ThoughtRiverProps) => {
   const reduceMotion = useReducedMotion() ?? false
   const [hovered, setHovered] = useState<string | null>(null)
   const sans = useMemo(() => getComputedStyle(document.body).fontFamily, [])
@@ -98,7 +109,7 @@ export const ThoughtRiver = ({ river, width: viewWidth, height: viewHeight, sele
     () => new Map([...layout.placed].map(([id, p]) => [id, { x: p.x, y: p.y }])),
     [layout],
   )
-  const pos = useGlide(target, reduceMotion)
+  const pos = useGlide(target, reduceMotion || instant)
 
   const byId = useMemo(() => new Map(moves.map((m) => [m.id, m])), [moves])
   // How many later moves rest on each: what carried the river gets drawn larger.
