@@ -61,9 +61,9 @@ const budgetFor = (req: Request): number =>
 const FALLBACK_PRICE_PER_MTOK = { input: 2, output: 10 }
 
 /** Input guards — reject abusive / runaway conversations before they cost money. */
-const MAX_MESSAGES = 40 // turns in a single request
+const MAX_MESSAGES = 50 // turns in a single request; Delphi closes by 40 (system-prompt.md)
 const MAX_CHARS_PER_MESSAGE = 8_000 // ~2k tokens
-const MAX_TOTAL_CHARS = 24_000 // whole conversation
+const MAX_TOTAL_CHARS = 100_000 // whole conversation
 
 /**
  * Per-IP burst limit (anti-abuse). The real spend ceiling is the monthly budget
