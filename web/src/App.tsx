@@ -70,6 +70,8 @@ function App() {
   )
   const river = useThoughtRiver(messages, meta?.id ?? null, isStreaming, riverStore)
   const [riverOpen, setRiverOpen] = useState(false)
+  // Opened from the closing card, the river opens expanded: the whole shape.
+  const [riverExpand, setRiverExpand] = useState(false)
   const [riverSeen, setRiverSeen] = useState(0)
   useEffect(() => {
     if (riverOpen) setRiverSeen(river.version)
@@ -192,6 +194,7 @@ function App() {
       )}
       <ThoughtRiverPanel
         open={riverOpen && chatStarted}
+        expandOnOpen={riverExpand}
         onClose={() => setRiverOpen(false)}
         state={river}
         status={river.status}
@@ -251,7 +254,10 @@ function App() {
                     open={riverOpen}
                     fresh={riverFresh}
                     drawing={river.status === 'drawing'}
-                    onClick={() => setRiverOpen((o) => !o)}
+                    onClick={() => {
+                      setRiverExpand(false)
+                      setRiverOpen((o) => !o)
+                    }}
                   />
                 </motion.div>
               )}
@@ -389,11 +395,13 @@ function App() {
               button then holds to the bottom edge. */}
           {closed ? (
             <ConversationClosed
-              closed={meta?.closed}
               onShowRiver={
                 // The river is desktop-only for now.
                 river.river.moves.length > 0 && window.matchMedia('(pointer: fine)').matches
-                  ? () => setRiverOpen(true)
+                  ? () => {
+                      setRiverExpand(true)
+                      setRiverOpen(true)
+                    }
                   : undefined
               }
               onNewChat={handleNewChat}

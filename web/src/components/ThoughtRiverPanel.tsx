@@ -57,6 +57,8 @@ const said = (content: string) => content.replace(/<[^>]+>/g, '').replace(/\s+/g
 
 interface ThoughtRiverPanelProps {
   open: boolean
+  /** Opens expanded rather than in the corner. */
+  expandOnOpen?: boolean
   onClose: () => void
   state: ThoughtRiverState
   status: RiverStatus
@@ -74,7 +76,7 @@ interface ThoughtRiverPanelProps {
  * and the conversation stays usable beneath. Time runs right; it scrolls
  * sideways, and keeps the newest moves in view as they arrive.
  */
-export const ThoughtRiverPanel = ({ open, onClose, state, status, onRetry, onRedraw, messages }: ThoughtRiverPanelProps) => {
+export const ThoughtRiverPanel = ({ open, expandOnOpen, onClose, state, status, onRetry, onRedraw, messages }: ThoughtRiverPanelProps) => {
   const { ref, width, height } = useSize()
   // Leave room under the river for a horizontal scrollbar.
   const riverHeight = Math.max(0, height - 8)
@@ -89,6 +91,9 @@ export const ThoughtRiverPanel = ({ open, onClose, state, status, onRetry, onRed
   // A long conversation outgrows the corner; expanded, the river takes most
   // of the screen.
   const [expanded, setExpanded] = useState(false)
+  useEffect(() => {
+    if (open && expandOnOpen) setExpanded(true)
+  }, [open, expandOnOpen])
   const size = panelSize(expanded, useViewport())
   // While the panel grows or shrinks, the river follows its size frame by
   // frame; gliding each frame toward a target that moves again next frame
