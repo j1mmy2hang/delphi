@@ -123,8 +123,11 @@ export const useConversationLibrary = () => {
     [scan, forget],
   )
 
-  // Restore the folder from the last visit. Chrome may still hold the
-  // permission (it offers "allow on every visit"); if not, wait for a click.
+  // Restore the folder from the last visit. Until access is confirmed it
+  // reads as 'needs-permission', with Reconnect one click away: Dia never
+  // answers queryPermission for a remembered folder, so waiting on the answer
+  // left the app in 'loading' for good. Chrome may still hold the permission
+  // ("allow on every visit"); when it says so, saving simply resumes.
   useEffect(() => {
     if (!supported) return
     let cancelled = false
@@ -134,19 +137,18 @@ export const useConversationLibrary = () => {
       if (!dir) return setStatus('none')
       setFolderName(dir.name)
       dirRef.current = dir
+      setStatus('needs-permission')
       let state: PermissionState
       try {
         state = await dir.queryPermission(READWRITE)
       } catch (err) {
-        // The folder is gone (moved or deleted): start over rather than sit
-        // in 'loading' with no status to click.
+        // The folder is gone (moved or deleted): start over.
         console.warn('Linked folder unavailable:', err)
-        if (!cancelled) await forget()
+        if (!cancelled && dirRef.current === dir) await forget()
         return
       }
-      if (cancelled) return
-      if (state === 'granted') await activate(dir)
-      else setStatus('needs-permission')
+      // Only if no other folder was chosen while the answer was pending.
+      if (!cancelled && state === 'granted' && dirRef.current === dir) await activate(dir)
     })()
     return () => {
       cancelled = true
@@ -191,27 +193,13 @@ export const useConversationLibrary = () => {
   /**
    * Re-grants access to the remembered folder. Must be called from a click.
    *
-   * Through the folder picker — not Chrome's "allow again?" prompt
-   * (requestPermission). Arc and Dia don't show that prompt: the request goes
-   * unanswered or is refused unseen, and either way the click that could have
-   * opened anything is spent. Choosing the folder in the picker grants access
-   * in every Chromium browser; it's how the folder was linked to begin with.
-   *
-   * The permission is checked first — that needs no click and spends nothing —
-   * so if access was restored meanwhile, saving resumes with no picker at all.
+   * Straight through the folder picker — it's how the folder was linked to
+   * begin with, and it works in every Chromium browser. Not Chrome's "allow
+   * again?" prompt (requestPermission), nor a queryPermission check first:
+   * Arc and Dia leave both unanswered, and the click that could have opened
+   * the picker is spent waiting.
    */
-  const reconnect = useCallback(async () => {
-    const dir = dirRef.current
-    if (dir) {
-      try {
-        if ((await dir.queryPermission(READWRITE)) === 'granted') return activate(dir)
-      } catch (err) {
-        // Folder moved or deleted: just pick again.
-        console.warn('[reconnect] linked folder unavailable:', err)
-      }
-    }
-    return chooseFolder()
-  }, [activate, chooseFolder])
+  const reconnect = chooseFolder
 
   /** Stops saving to the folder. The files in it are left as they are. */
   const unlink = forget

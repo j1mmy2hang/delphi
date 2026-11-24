@@ -29,6 +29,7 @@ import { ThoughtRiverButton } from './components/ThoughtRiverButton'
 import { ThoughtRiverPanel } from './components/ThoughtRiverPanel'
 import { EASE_IN, EASE_OUT, FLOATING_BUTTON, SPRING_GLIDE } from './constants'
 import { ConversationClosed } from './components/ConversationClosed'
+import { UnsavedNewChat } from './components/UnsavedNewChat'
 import { closingIndex } from './chat/closing'
 import { useChatStream } from './hooks/useChatStream'
 import { useConversationLibrary, type LibraryEntry } from './hooks/useConversationLibrary'
@@ -154,6 +155,14 @@ function App() {
     savedRef.current = null
   }
 
+  // A conversation with no folder to go to lives only on this screen; leaving
+  // it erases it, so ask first — and offer to link a folder instead.
+  const [confirmNewChat, setConfirmNewChat] = useState(false)
+  const requestNewChat = () => {
+    if (chatStarted && library.status !== 'ready') setConfirmNewChat(true)
+    else handleNewChat()
+  }
+
   const handleDelete = async (entry: LibraryEntry) => {
     // Deleting the conversation on screen leaves nothing to continue.
     if (entry.id === meta?.id) handleNewChat()
@@ -231,7 +240,7 @@ function App() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handleNewChat}
+                  onClick={requestNewChat}
                   aria-label="New chat"
                   className={cn('pointer-events-auto', FLOATING_BUTTON)}
                 >
@@ -332,7 +341,7 @@ function App() {
                                     failure={message.error}
                                     active={i === messages.length - 1}
                                     onRetry={retry}
-                                    onNewChat={handleNewChat}
+                                    onNewChat={requestNewChat}
                                   />
                                 ) : (
                                   !text && <LoadingState />
@@ -404,7 +413,7 @@ function App() {
                     }
                   : undefined
               }
-              onNewChat={handleNewChat}
+              onNewChat={requestNewChat}
             />
           ) : (
             <PromptInput onSubmit={handleSubmit}>
@@ -473,6 +482,23 @@ function App() {
           )}
         </AnimatePresence>
       </div>
+      <UnsavedNewChat
+        open={confirmNewChat}
+        status={library.status}
+        folderName={library.folderName}
+        onCancel={() => setConfirmNewChat(false)}
+        onSave={() => {
+          // Straight from the click: the folder picker needs one. Once a
+          // folder is ready, the conversation on screen is written to it.
+          if (library.status === 'needs-permission') library.reconnect()
+          else library.chooseFolder()
+          setConfirmNewChat(false)
+        }}
+        onDiscard={() => {
+          setConfirmNewChat(false)
+          handleNewChat()
+        }}
+      />
     </div>
   )
 }
